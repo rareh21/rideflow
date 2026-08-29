@@ -1,13 +1,47 @@
-node_modules
-.next
-dist
-.turbo
+# Dependencies
+node_modules/
+.pnpm-store/
 
+# Build output
+dist/
+build/
+
+# Turbo
+.turbo/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Environment files
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
-coverage
-
-.DS_Store
+# Logs
 *.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary files
+.temp/
+.tmp/
+
+# Generated files
+generated/
