@@ -1,7 +1,5 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
-  moduleFormat = "esm"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -39,7 +37,7 @@ model User {
 model Driver {
   id            String       @id @default(uuid())
   userId        String       @unique
-  licenseNumber String?
+  licenseNumber String?      @unique
   status        DriverStatus @default(OFFLINE)
 
   user          User         @relation(fields: [userId], references: [id])
