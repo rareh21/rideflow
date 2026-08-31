@@ -30,6 +30,7 @@ const BookingContext = createContext<
 const initialState: BookingState = {
     pickup: {
         label: "Current location · Hyderabad",
+        locationId: "596d2a57-754a-49d9-a174-15d553610510",
     },
     destination: null,
     selectedRide: null,

@@ -25,11 +25,12 @@ model User {
   passwordHash String
   role         UserRole @default(RIDER)
 
-  driver       Driver?
+  driver Driver?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   refreshTokens RefreshToken[]
+  ridesAsRider  Ride[]         @relation("RiderRides")
 
   @@index([role])
 }
@@ -40,25 +41,26 @@ model Driver {
   licenseNumber String?      @unique
   status        DriverStatus @default(OFFLINE)
 
-  user          User         @relation(fields: [userId], references: [id])
-  vehicle       Vehicle?
+  user    User     @relation(fields: [userId], references: [id])
+  vehicle Vehicle?
 
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  rides     Ride[]   @relation("DriverRides")
 
   @@index([status])
 }
 
 model Vehicle {
-  id        String   @id @default(uuid())
-  driverId  String   @unique
+  id       String @id @default(uuid())
+  driverId String @unique
 
-  make      String
-  model     String
-  year      Int
+  make        String
+  model       String
+  year        Int
   plateNumber String @unique
 
-  driver    Driver   @relation(fields: [driverId], references: [id])
+  driver Driver @relation(fields: [driverId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -74,4 +76,72 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+enum RideStatus {
+  REQUESTED
+  SEARCHING_DRIVER
+  DRIVER_ASSIGNED
+  DRIVER_ARRIVING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum RideType {
+  GO
+  PLUS
+  XL
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  CASH
+}
+
+model Location {
+  id String @id @default(uuid())
+
+  label     String
+  latitude  Decimal
+  longitude Decimal
+
+  createdAt DateTime @default(now())
+
+  pickupRides      Ride[] @relation("PickupLocation")
+  destinationRides Ride[] @relation("DestinationLocation")
+}
+
+model Ride {
+  id String @id @default(uuid())
+
+  riderId  String
+  driverId String?
+
+  pickupLocationId      String
+  destinationLocationId String
+
+  rideType RideType
+  status   RideStatus @default(REQUESTED)
+
+  estimatedFare            Decimal
+  estimatedDistanceKm      Decimal
+  estimatedDurationMinutes Int
+
+  paymentMethod PaymentMethod?
+
+  rider  User    @relation("RiderRides", fields: [riderId], references: [id])
+  driver Driver? @relation("DriverRides", fields: [driverId], references: [id])
+
+  pickupLocation      Location @relation("PickupLocation", fields: [pickupLocationId], references: [id])
+  destinationLocation Location @relation("DestinationLocation", fields: [destinationLocationId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([riderId])
+  @@index([driverId])
+  @@index([status])
+  @@index([createdAt])
 }

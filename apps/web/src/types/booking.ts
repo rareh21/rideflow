@@ -11,10 +11,15 @@ export type LocationPoint = {
   label: string;
   latitude?: number;
   longitude?: number;
+  locationId?: string;
 };
 
-export type Destination = LocationPoint & {
+export type Destination = {
   id: string;
+  label: string;
+  latitude?: number;
+  longitude?: number;
+  locationId?: string;
 };
 
 export type BookingState = {

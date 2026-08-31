@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 
 import { useBooking } from "@/context/booking-context";
+import { createRide } from "@/lib/rides";
+import { useState } from "react";
 
 export default function ConfirmRidePage() {
     const router = useRouter();
@@ -12,6 +14,9 @@ export default function ConfirmRidePage() {
         destination,
         selectedRide,
     } = useBooking();
+
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     if (!destination || !selectedRide) {
         return (
@@ -41,8 +46,43 @@ export default function ConfirmRidePage() {
         );
     }
 
-    function confirmRide() {
-        router.push("/rider/finding-driver");
+    async function confirmRide() {
+        if (
+            !pickup?.locationId ||
+            !destination?.locationId ||
+            !selectedRide
+        ) {
+            setError(
+                "We're missing location or ride information. Please try again.",
+            );
+
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+            setError(null);
+
+            const ride = await createRide({
+                pickupLocationId: pickup.locationId,
+                destinationLocationId: destination.locationId,
+                rideType: selectedRide.category,
+                estimatedFare: selectedRide.fare,
+                estimatedDistanceKm: 3.8,
+                estimatedDurationMinutes: 12,
+                paymentMethod: "UPI",
+            });
+
+            router.push(
+                `/rider/finding-driver?rideId=${ride.id}`,
+            );
+        } catch {
+            setError(
+                "We couldn't request your ride. Please try again.",
+            );
+        } finally {
+            setIsSubmitting(false);
+        }
     }
 
     return (
@@ -151,14 +191,25 @@ export default function ConfirmRidePage() {
                         </p>
 
                     </div>
+                    {error && (
+                        <div
+                            role="alert"
+                            className="mt-4 rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700"
+                        >
+                            {error}
+                        </div>
+                    )}
 
                     {/* Confirm */}
                     <button
                         type="button"
-                        onClick={confirmRide}
-                        className="mt-6 h-14 w-full rounded-2xl bg-rf-green text-sm font-semibold text-white transition hover:bg-rf-green-dark"
+                        onClick={() => void confirmRide()}
+                        disabled={isSubmitting}
+                        className="mt-6 h-14 w-full rounded-2xl bg-rf-green text-sm font-semibold text-white transition hover:bg-rf-green-dark disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                        Confirm & request ride
+                        {isSubmitting
+                            ? "Requesting your ride..."
+                            : "Confirm & request ride"}
                     </button>
 
                 </section>

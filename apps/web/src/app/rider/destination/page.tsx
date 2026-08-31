@@ -8,18 +8,27 @@ import { useBooking } from "@/context/booking-context";
 const destinations = [
     {
         id: "madhapur",
+        locationId: "596d2a57-754a-49d9-a174-15d553610510",
         label: "Madhapur",
         distance: "3.8 km away",
     },
     {
         id: "jubilee-hills",
+        locationId: "420760e7-8055-4616-86f8-3381beb52058",
         label: "Jubilee Hills",
         distance: "6.2 km away",
     },
     {
         id: "hitech-city",
+        locationId: "420760e7-8055-4616-86f8-3381beb52058",
         label: "Hitech City",
         distance: "5.1 km away",
+    },
+    {
+        id: "kondapur",
+        locationId: "596d2a57-754a-49d9-a174-15d553610510",
+        label: "Kondapur",
+        distance: "0.1 km away",
     },
 ];
 
@@ -43,6 +52,7 @@ export default function DestinationPage() {
         setDestination({
             id: destination.id,
             label: destination.label,
+            locationId: destination.locationId,
         });
 
         router.push("/rider/route");
