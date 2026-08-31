@@ -3,6 +3,8 @@ import {
     Controller,
     Post,
     UseGuards,
+    Get,
+    Param,
 } from "@nestjs/common";
 
 import { RidesService } from "./rides.service";
@@ -32,6 +34,28 @@ export class RidesController {
         return this.ridesService.create(
             user.userId,
             dto,
+        );
+    }
+
+    @Get(":id")
+    @Roles(UserRole.RIDER)
+    findOne(
+        @Param("id") rideId: string,
+        @CurrentUser() user: AuthUser,
+    ) {
+        return this.ridesService.findById(
+            rideId,
+            user.userId,
+        );
+    }
+
+    @Post(":id/match-driver")
+    @Roles(UserRole.ADMIN)
+    matchDriver(
+        @Param("id") rideId: string,
+    ) {
+        return this.ridesService.assignDriver(
+            rideId,
         );
     }
 }

@@ -40,3 +40,11 @@ export async function createRide(
         body: JSON.stringify(payload),
     });
 }
+
+export async function getRide(
+    rideId: string,
+) {
+    return api<Ride>(
+        `/rides/${rideId}`,
+    );
+}
