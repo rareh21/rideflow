@@ -32,6 +32,7 @@ model User {
   refreshTokens     RefreshToken[]
   ridesAsRider      Ride[]             @relation("RiderRides")
   driverApplication DriverApplication?
+  preferences UserPreference?
 
   @@index([role])
 }
@@ -173,4 +174,17 @@ model DriverApplication {
   updatedAt DateTime @updatedAt
 
   @@index([status])
+}
+
+model UserPreference {
+  id                        String        @id @default(uuid())
+  userId                    String        @unique
+  defaultPaymentMethod      PaymentMethod @default(UPI)
+  rideNotificationsEnabled  Boolean       @default(true)
+  promotionalNotificationsEnabled Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

@@ -1,4 +1,5 @@
 import {
+  IsEmail,
   IsOptional,
   IsString,
   MinLength,
@@ -9,4 +10,8 @@ export class UpdateProfileDto {
   @IsString()
   @MinLength(2)
   name?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 }
