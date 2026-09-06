@@ -50,4 +50,10 @@ export class AuthController {
             message: "Admin authorization successful",
         };
     }
+
+    @Post('logout')
+    @UseGuards(JwtAuthGuard)
+    async logout(@CurrentUser() user: AuthUser) {
+        return this.authService.logout(user.userId);
+    }
 }

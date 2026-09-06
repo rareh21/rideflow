@@ -49,8 +49,14 @@ export async function getCurrentUser() {
   }>("/auth/me");
 }
 
-export function logout() {
-  if (typeof window !== "undefined") {
+
+export async function logout() {
+  try {
+    await api("/auth/logout", {
+      method: "POST",
+    });
+  } finally {
+    // Always clear the client session, even if the API request fails.
     sessionStorage.removeItem("accessToken");
   }
 }

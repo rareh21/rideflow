@@ -151,20 +151,20 @@ export default function ProfilePage() {
                                 type="button"
                                 onClick={() => setLogoutOpen(true)}
                                 className="
-                  flex w-full
-                  items-center justify-center gap-2
-                  rounded-2xl
-                  border border-red-200
-                  bg-[var(--rf-surface)]
-                  px-4 py-4
-                  text-sm font-semibold
-                  text-[var(--rf-danger)]
-                  transition
-                  hover:bg-red-50
-                  focus-visible:outline-none
-                  focus-visible:ring-2
-                  focus-visible:ring-red-500
-                "
+                                flex w-full
+                                items-center justify-center gap-2
+                                rounded-2xl
+                                border border-red-200
+                                bg-[var(--rf-surface)]
+                                px-4 py-4
+                                text-sm font-semibold
+                                text-[var(--rf-danger)]
+                                transition
+                                hover:bg-red-50
+                                focus-visible:outline-none
+                                focus-visible:ring-2
+                                focus-visible:ring-red-500
+                                "
                             >
                                 <LogOut size={18} />
                                 Sign out

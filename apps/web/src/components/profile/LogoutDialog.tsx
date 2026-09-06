@@ -109,9 +109,9 @@ export function LogoutDialog({
                     <h2
                         id="logout-dialog-title"
                         className="
-              text-xl font-bold
-              text-[var(--rf-text)]
-            "
+                        text-xl font-bold
+                        text-[var(--rf-text)]
+                        "
                     >
                         Sign out of RideFlow?
                     </h2>
@@ -119,10 +119,10 @@ export function LogoutDialog({
                     <p
                         id="logout-dialog-description"
                         className="
-              mt-2
-              text-sm leading-6
-              text-[var(--rf-muted)]
-            "
+                        mt-2
+                        text-sm leading-6
+                        text-[var(--rf-muted)]
+                        "
                     >
                         You can sign back in anytime using your RideFlow account.
                     </p>
@@ -135,20 +135,20 @@ export function LogoutDialog({
                         onClick={onCancel}
                         disabled={loading}
                         className="
-              rounded-2xl
-              border border-[var(--rf-border)]
-              bg-[var(--rf-surface)]
-              px-4 py-3
-              text-sm font-semibold
-              text-[var(--rf-text)]
-              transition
-              hover:bg-[var(--rf-surface-muted)]
-              focus-visible:outline-none
-              focus-visible:ring-2
-              focus-visible:ring-[var(--rf-green)]
-              disabled:cursor-not-allowed
-              disabled:opacity-50
-            "
+                        rounded-2xl
+                        border border-[var(--rf-border)]
+                        bg-[var(--rf-surface)]
+                        px-4 py-3
+                        text-sm font-semibold
+                        text-[var(--rf-text)]
+                        transition
+                        hover:bg-[var(--rf-surface-muted)]
+                        focus-visible:outline-none
+                        focus-visible:ring-2
+                        focus-visible:ring-[var(--rf-green)]
+                        disabled:cursor-not-allowed
+                        disabled:opacity-50
+                        "
                     >
                         Cancel
                     </button>
@@ -158,19 +158,19 @@ export function LogoutDialog({
                         onClick={onConfirm}
                         disabled={loading}
                         className="
-              rounded-2xl
-              bg-[var(--rf-danger)]
-              px-4 py-3
-              text-sm font-semibold
-              text-white
-              transition
-              hover:bg-red-600
-              focus-visible:outline-none
-              focus-visible:ring-2
-              focus-visible:ring-red-500
-              disabled:cursor-not-allowed
-              disabled:opacity-50
-            "
+                        rounded-2xl
+                        bg-[var(--rf-danger)]
+                        px-4 py-3
+                        text-sm font-semibold
+                        text-white
+                        transition
+                        hover:bg-red-600
+                        focus-visible:outline-none
+                        focus-visible:ring-2
+                        focus-visible:ring-red-500
+                        disabled:cursor-not-allowed
+                        disabled:opacity-50
+                        "
                     >
                         {loading ? "Signing out..." : "Sign out"}
                     </button>

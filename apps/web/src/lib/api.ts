@@ -1,48 +1,64 @@
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ??
-  "http://localhost:4000";
+  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export async function api<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token =
-    typeof window !== "undefined"
-      ? sessionStorage.getItem("accessToken")
-      : null;
+  const token = sessionStorage.getItem('accessToken');
 
-  const response = await fetch(
-    `${API_URL}${path}`,
-    {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : {}),
-        ...options.headers,
-      },
-    },
-  );
+  const headers = new Headers(options.headers);
+
+  headers.set('Content-Type', 'application/json');
+
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers,
+  });
+
+  if (response.status === 401) {
+    sessionStorage.removeItem('accessToken');
+
+    if (
+      typeof window !== 'undefined' &&
+      !window.location.pathname.startsWith('/login') &&
+      !window.location.pathname.startsWith('/register')
+    ) {
+      const returnUrl =
+        window.location.pathname + window.location.search;
+
+      window.location.replace(
+        `/login?returnUrl=${encodeURIComponent(returnUrl)}`,
+      );
+    }
+
+    throw new Error('Your session has expired. Please log in again.');
+  }
 
   if (!response.ok) {
-    let message = "Something went wrong";
+    let message = 'Something went wrong';
 
     try {
-      const error = await response.json();
+      const data = await response.json();
 
-      if (Array.isArray(error.message)) {
-        message = error.message.join(", ");
-      } else if (error.message) {
-        message = error.message;
+      if (Array.isArray(data?.message)) {
+        message = data.message.join(', ');
+      } else if (data?.message) {
+        message = data.message;
       }
     } catch {
-      // Ignore parsing errors
+      // Ignore invalid/non-JSON error responses
     }
 
     throw new Error(message);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json();

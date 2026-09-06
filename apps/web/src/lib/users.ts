@@ -59,3 +59,69 @@ export function updateUserPreferences(
         body: JSON.stringify(payload),
     });
 }
+
+export type SavedPlace = {
+    id: string;
+    userId: string;
+    label: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type CreateSavedPlaceInput = {
+    label: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+};
+
+export async function getSavedPlaces() {
+    return api<SavedPlace[]>("/users/me/saved-places");
+}
+
+export async function createSavedPlace(
+    data: CreateSavedPlaceInput,
+) {
+    return api<SavedPlace>("/users/me/saved-places", {
+        method: "POST",
+        body: JSON.stringify(data),
+    });
+}
+
+export async function updateSavedPlace(
+    id: string,
+    data: Partial<CreateSavedPlaceInput>,
+) {
+    return api<SavedPlace>(
+        `/users/me/saved-places/${id}`,
+        {
+            method: "PATCH",
+            body: JSON.stringify(data),
+        },
+    );
+}
+
+export async function deleteSavedPlace(id: string) {
+    return api<{ success: boolean }>(
+        `/users/me/saved-places/${id}`,
+        {
+            method: "DELETE",
+        },
+    );
+}
+
+export async function changePassword(data: {
+    currentPassword: string;
+    newPassword: string;
+}) {
+    return api<{ success: boolean }>(
+        "/users/me/security/password",
+        {
+            method: "PATCH",
+            body: JSON.stringify(data),
+        },
+    );
+}

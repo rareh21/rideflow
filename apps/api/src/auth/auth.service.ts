@@ -12,10 +12,10 @@ import { JwtService } from "@nestjs/jwt/dist/jwt.service";
 @Injectable()
 export class AuthService {
     constructor(
-        private readonly prisma: PrismaService, 
+        private readonly prisma: PrismaService,
         private readonly jwtService: JwtService
     ) { }
-    
+
     async register(dto: RegisterDto) {
         const existingUser = await this.prisma.user.findUnique({
             where: {
@@ -80,6 +80,17 @@ export class AuthService {
                 email: user.email,
                 role: user.role,
             },
+        };
+    }
+
+    async logout(userId: string) {
+        await this.prisma.refreshToken.deleteMany({
+            where: { userId },
+        });
+
+        return {
+            success: true,
+            message: 'Logged out successfully',
         };
     }
 }
