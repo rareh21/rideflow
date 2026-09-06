@@ -1,101 +1,185 @@
 "use client";
 
-import Link from "next/link";
+import {
+    Bell,
+    CreditCard,
+    HelpCircle,
+    Lock,
+    LogOut,
+    MapPin,
+    Shield,
+    UserRound,
+} from "lucide-react";
 import { useEffect, useState } from "react";
-import { getCurrentUser, logout } from "@/lib/auth";
-import { useRouter } from "next/navigation";
 
-type AuthenticatedUser = {
-  userId: string;
-  role: "RIDER" | "DRIVER" | "ADMIN";
-};
+import { ProfileCard } from "@/components/profile/ProfileCard";
+import { ProfileError } from "@/components/profile/ProfileError";
+import { ProfileHeader } from "@/components/profile/ProfileHeader";
+import { ProfileMenuItem } from "@/components/profile/ProfileMenuItem";
+import { ProfileSection } from "@/components/profile/ProfileSection";
+import { ProfileSkeleton } from "@/components/profile/ProfileSkeleton";
+import { LogoutDialog } from "@/components/profile/LogoutDialog";
+import { useAuth } from "@/context/auth-context";
+import { getUserProfile, UserProfile } from "@/lib/users";
 
 export default function ProfilePage() {
-  const router = useRouter();
+    const { logout } = useAuth();
 
-  const [user, setUser] =
-    useState<AuthenticatedUser | null>(null);
+    const [profile, setProfile] = useState<UserProfile | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+    const [logoutOpen, setLogoutOpen] = useState(false);
+    const [loggingOut, setLoggingOut] = useState(false);
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+    async function loadProfile() {
+        try {
+            setLoading(true);
+            setError("");
 
-  useEffect(() => {
-    async function loadUser() {
-      try {
-        const response =
-          await getCurrentUser();
-
-        setUser(response.user);
-      } catch {
-        setError("You are not authenticated.");
-      } finally {
-        setLoading(false);
-      }
+            const data = await getUserProfile();
+            setProfile(data);
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Unable to load your profile."
+            );
+        } finally {
+            setLoading(false);
+        }
     }
 
-    loadUser();
-  }, []);
+    useEffect(() => {
+        loadProfile();
+    }, []);
 
-  function handleLogout() {
-    logout();
-    router.push("/login");
-  }
+    async function handleLogout() {
+        try {
+            setLoggingOut(true);
+            await logout();
+        } finally {
+            setLoggingOut(false);
+            setLogoutOpen(false);
+        }
+    }
 
-  if (loading) {
+    if (loading) {
+        return <ProfileSkeleton />;
+    }
+
     return (
-      <main className="p-8">
-        Loading profile...
-      </main>
+        <main className="min-h-screen bg-[var(--rf-surface-muted)]">
+            <div className="mx-auto max-w-2xl px-4 pb-12 pt-6 sm:px-6">
+                <ProfileHeader
+                    title="Profile"
+                    editHref="/profile/edit"
+                />
+
+                {error ? (
+                    <ProfileError
+                        message={error}
+                        onRetry={loadProfile}
+                    />
+                ) : profile ? (
+                    <>
+                        <ProfileCard
+                            name={profile.name}
+                            email={profile.email}
+                            role={profile.role}
+                            createdAt={profile.createdAt}
+                        />
+
+                        <div className="mt-8 space-y-6">
+                            <ProfileSection title="Personal">
+                                <ProfileMenuItem
+                                    href="/profile/edit"
+                                    icon={UserRound}
+                                    title="Personal information"
+                                    description="Manage your name and account details"
+                                />
+
+                                <ProfileMenuItem
+                                    href="/profile/saved-places"
+                                    icon={MapPin}
+                                    title="Saved places"
+                                    description="Home, work and favorite locations"
+                                />
+                            </ProfileSection>
+
+                            <ProfileSection title="Payments">
+                                <ProfileMenuItem
+                                    href="/profile/payment-settings"
+                                    icon={CreditCard}
+                                    title="Payment settings"
+                                    description="Manage your preferred payment method"
+                                />
+                            </ProfileSection>
+
+                            <ProfileSection title="Preferences">
+                                <ProfileMenuItem
+                                    href="/profile/preferences"
+                                    icon={Bell}
+                                    title="Notifications"
+                                    description="Manage your RideFlow notifications"
+                                />
+
+                                <ProfileMenuItem
+                                    href="/profile/privacy"
+                                    icon={Shield}
+                                    title="Privacy"
+                                    description="Manage privacy preferences"
+                                />
+
+                                <ProfileMenuItem
+                                    href="/profile/security"
+                                    icon={Lock}
+                                    title="Security"
+                                    description="Manage account security"
+                                />
+                            </ProfileSection>
+
+                            <ProfileSection title="Support">
+                                <ProfileMenuItem
+                                    href="/profile/help-support"
+                                    icon={HelpCircle}
+                                    title="Help & support"
+                                    description="Get help with RideFlow"
+                                />
+                            </ProfileSection>
+
+                            <button
+                                type="button"
+                                onClick={() => setLogoutOpen(true)}
+                                className="
+                  flex w-full
+                  items-center justify-center gap-2
+                  rounded-2xl
+                  border border-red-200
+                  bg-[var(--rf-surface)]
+                  px-4 py-4
+                  text-sm font-semibold
+                  text-[var(--rf-danger)]
+                  transition
+                  hover:bg-red-50
+                  focus-visible:outline-none
+                  focus-visible:ring-2
+                  focus-visible:ring-red-500
+                "
+                            >
+                                <LogOut size={18} />
+                                Sign out
+                            </button>
+                        </div>
+                    </>
+                ) : null}
+            </div>
+
+            <LogoutDialog
+                open={logoutOpen}
+                loading={loggingOut}
+                onCancel={() => setLogoutOpen(false)}
+                onConfirm={handleLogout}
+            />
+        </main>
     );
-  }
-
-  if (error || !user) {
-    return (
-      <main className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600">
-            {error}
-          </p>
-
-          <Link
-            href="/login"
-            className="mt-4 inline-block underline"
-          >
-            Go to login
-          </Link>
-        </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className="min-h-screen p-8">
-      <div className="mx-auto max-w-2xl">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">
-            Profile
-          </h1>
-
-          <button
-            onClick={handleLogout}
-            className="rounded-md border px-4 py-2"
-          >
-            Logout
-          </button>
-        </div>
-
-        <div className="mt-8 rounded-xl border p-6">
-          <p>
-            <strong>User ID:</strong>{" "}
-            {user.userId}
-          </p>
-
-          <p className="mt-2">
-            <strong>Role:</strong>{" "}
-            {user.role}
-          </p>
-        </div>
-      </div>
-    </main>
-  );
 }
