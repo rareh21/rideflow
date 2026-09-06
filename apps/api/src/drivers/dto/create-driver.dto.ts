@@ -1,10 +1,20 @@
 import {
-  IsOptional,
+  IsEmail,
   IsString,
+  MinLength,
 } from "class-validator";
 
 export class CreateDriverDto {
-  @IsOptional()
   @IsString()
-  licenseNumber?: string;
+  name!: string;
+
+  @IsEmail()
+  email!: string;
+
+  @IsString()
+  @MinLength(8)
+  password!: string;
+
+  @IsString()
+  licenseNumber!: string;
 }

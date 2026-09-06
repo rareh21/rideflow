@@ -27,10 +27,11 @@ model User {
 
   driver Driver?
 
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  refreshTokens RefreshToken[]
-  ridesAsRider  Ride[]         @relation("RiderRides")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  refreshTokens     RefreshToken[]
+  ridesAsRider      Ride[]             @relation("RiderRides")
+  driverApplication DriverApplication?
 
   @@index([role])
 }
@@ -144,4 +145,32 @@ model Ride {
   @@index([driverId])
   @@index([status])
   @@index([createdAt])
+}
+
+enum DriverApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model DriverApplication {
+  id String @id @default(uuid())
+
+  userId String @unique
+
+  status DriverApplicationStatus @default(PENDING)
+
+  licenseNumber String?
+
+  rejectionReason String?
+
+  reviewedAt   DateTime?
+  reviewedById String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
 }

@@ -1,6 +1,12 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, UserRole } from "@prisma/client";
+import * as bcrypt from "bcrypt";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL!,
+});
+
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
     await prisma.location.createMany({
@@ -27,6 +33,56 @@ async function main() {
             },
         ],
     });
+
+    const email =
+        process.env.ADMIN_EMAIL ??
+        "admin@rideflow.dev";
+
+    const password =
+        process.env.ADMIN_PASSWORD;
+
+    if (!password) {
+        throw new Error(
+            "ADMIN_PASSWORD environment variable is required",
+        );
+    }
+
+    const existingAdmin =
+        await prisma.user.findUnique({
+            where: {
+                email,
+            },
+        });
+
+    if (existingAdmin) {
+        if (existingAdmin.role !== UserRole.ADMIN) {
+            throw new Error(
+                `User ${email} already exists but is not an ADMIN`,
+            );
+        }
+
+        console.log(
+            `Admin already exists: ${email}`,
+        );
+
+        return;
+    }
+
+    const passwordHash =
+        await bcrypt.hash(password, 12);
+
+    const admin = await prisma.user.create({
+        data: {
+            name: "RideFlow Admin",
+            email,
+            passwordHash,
+            role: UserRole.ADMIN,
+        },
+    });
+
+    console.log(
+        `Admin created: ${admin.email}`,
+    );
 }
 
 main()

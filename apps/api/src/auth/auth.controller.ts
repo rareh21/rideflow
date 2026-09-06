@@ -41,4 +41,13 @@ export class AuthController {
             message: "Driver access granted",
         };
     }
+
+    @Get("admin-test")
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    adminTest() {
+        return {
+            message: "Admin authorization successful",
+        };
+    }
 }

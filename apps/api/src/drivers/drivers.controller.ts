@@ -3,42 +3,92 @@ import {
     Controller,
     Post,
     UseGuards,
+    Get,
+    Param,
     Patch,
+    Request
 } from "@nestjs/common";
 
 import { DriversService } from "./drivers.service";
+import { CreateDriverDto } from "./dto/create-driver.dto";
+
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { RolesGuard } from "../auth/guards/roles.guard";
+import { Roles } from "../auth/decorators/roles.decorator";
+
+import { UserRole } from "@prisma/client";
+import { CreateDriverApplicationDto } from "./dto/create-driver-application.dto";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthUser } from "../auth/types/auth-user.type";
-import { CreateDriverDto } from "./dto/create-driver.dto";
-import { UpdateDriverStatusDto } from "./dto/update-driver-status.dto";
+import { ReviewDriverApplicationDto } from "./dto/review-driver-application.dto";
 
 @Controller("drivers")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class DriversController {
     constructor(
         private readonly driversService: DriversService,
     ) { }
 
-    @Post("me")
-    createDriver(
+    @Post()
+    @Roles(UserRole.ADMIN)
+    create(@Body() dto: CreateDriverDto) {
+        return this.driversService.create(dto);
+    }
+
+    @Post("application")
+    @Roles(
+        UserRole.RIDER,
+        UserRole.DRIVER,
+    )
+    apply(
         @CurrentUser() user: AuthUser,
-        @Body() dto: CreateDriverDto,
+        @Body() dto: CreateDriverApplicationDto,
     ) {
-        return this.driversService.createDriver(
+        return this.driversService.apply(
             user.userId,
             dto,
         );
     }
 
-    @Patch("me/status")
-    updateStatus(
+    @Get("application")
+    @Roles(
+        UserRole.RIDER,
+        UserRole.DRIVER,
+    )
+    getApplication(
         @CurrentUser() user: AuthUser,
-        @Body() dto: UpdateDriverStatusDto,
     ) {
-        return this.driversService.updateStatus(
+        return this.driversService.getApplication(
             user.userId,
-            dto.status,
+        );
+    }
+
+    @Get("applications")
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    getApplications() {
+        return this.driversService.getApplications();
+    }
+
+    @Get("applications/:id")
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    getApplicationById(@Param("id") id: string) {
+        return this.driversService.getApplication(id);
+    }
+
+    @Patch("applications/:id/review")
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    reviewApplication(
+        @Param("id") id: string,
+        @Body() dto: ReviewDriverApplicationDto,
+        @Request() req: any,
+    ) {
+        return this.driversService.reviewApplication(
+            id,
+            req.user.userId,
+            dto,
         );
     }
 }
