@@ -108,9 +108,7 @@ export class DriversService {
         });
 
         if (!user) {
-            throw new NotFoundException(
-                "User not found",
-            );
+            throw new NotFoundException("User not found");
         }
 
         if (user.driver) {
@@ -119,10 +117,28 @@ export class DriversService {
             );
         }
 
-        if (user.driverApplication) {
+        if (
+            user.driverApplication &&
+            user.driverApplication.status !== "REJECTED"
+        ) {
             throw new ConflictException(
                 `Driver application already exists with status ${user.driverApplication.status}`,
             );
+        }
+
+        if (user.driverApplication?.status === "REJECTED") {
+            return this.prisma.driverApplication.update({
+                where: {
+                    id: user.driverApplication.id,
+                },
+                data: {
+                    status: "PENDING",
+                    licenseNumber: dto.licenseNumber,
+                    rejectionReason: null,
+                    reviewedAt: null,
+                    reviewedById: null,
+                },
+            });
         }
 
         return this.prisma.driverApplication.create({
@@ -310,7 +326,9 @@ export class DriversService {
 
     async getMyDriver(userId: string) {
         const driver = await this.prisma.driver.findUnique({
-            where: { userId },
+            where: {
+                userId,
+            },
             include: {
                 user: {
                     select: {
@@ -318,6 +336,7 @@ export class DriversService {
                         name: true,
                         email: true,
                         role: true,
+                        createdAt: true,
                     },
                 },
                 vehicle: true,
@@ -325,7 +344,39 @@ export class DriversService {
         });
 
         if (!driver) {
-            throw new NotFoundException('Driver profile not found');
+            throw new NotFoundException(
+                "Driver profile not found",
+            );
+        }
+
+        return {
+            id: driver.id,
+            userId: driver.userId,
+            licenseNumber: driver.licenseNumber,
+            status: driver.status,
+            createdAt: driver.createdAt,
+            updatedAt: driver.updatedAt,
+            user: driver.user,
+            vehicle: driver.vehicle,
+        };
+    }
+
+    async getMyStatus(userId: string) {
+        const driver = await this.prisma.driver.findUnique({
+            where: {
+                userId,
+            },
+            select: {
+                id: true,
+                status: true,
+                updatedAt: true,
+            },
+        });
+
+        if (!driver) {
+            throw new NotFoundException(
+                "Driver profile not found",
+            );
         }
 
         return driver;
@@ -333,30 +384,42 @@ export class DriversService {
 
     async updateStatus(
         userId: string,
-        requestedStatus: DriverStatus,  
+        requestedStatus: DriverStatus,
     ) {
         const driver = await this.prisma.driver.findUnique({
-            where: { userId },
+            where: {
+                userId,
+            },
         });
 
         if (!driver) {
-            throw new NotFoundException('Driver profile not found');
+            throw new NotFoundException(
+                "Driver profile not found",
+            );
         }
 
         if (driver.status === requestedStatus) {
-            return driver;
+            return {
+                id: driver.id,
+                status: driver.status,
+                updatedAt: driver.updatedAt,
+            };
         }
 
         const allowedTransitions: Record<
             DriverStatus,
             DriverStatus[]
         > = {
-            OFFLINE: [DriverStatus.AVAILABLE],
+            OFFLINE: [
+                DriverStatus.AVAILABLE,
+            ],
             AVAILABLE: [
                 DriverStatus.OFFLINE,
                 DriverStatus.BUSY,
             ],
-            BUSY: [DriverStatus.AVAILABLE],
+            BUSY: [
+                DriverStatus.AVAILABLE,
+            ],
         };
 
         if (
@@ -370,9 +433,16 @@ export class DriversService {
         }
 
         return this.prisma.driver.update({
-            where: { id: driver.id },
+            where: {
+                id: driver.id,
+            },
             data: {
                 status: requestedStatus,
+            },
+            select: {
+                id: true,
+                status: true,
+                updatedAt: true,
             },
         });
     }

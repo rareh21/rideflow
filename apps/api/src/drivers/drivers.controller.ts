@@ -65,21 +65,18 @@ export class DriversController {
     }
 
     @Get("applications")
-    @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     getApplications() {
         return this.driversService.getApplications();
     }
 
     @Get("applications/:id")
-    @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     getApplicationById(@Param("id") id: string) {
         return this.driversService.getApplication(id);
     }
 
     @Patch("applications/:id/review")
-    @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     reviewApplication(
         @Param("id") id: string,
@@ -94,14 +91,23 @@ export class DriversController {
     }
 
     @Get('me')
-    @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.DRIVER)
     getMyDriver(@CurrentUser() user: AuthUser) {
         return this.driversService.getMyDriver(user.userId);
     }
 
+
+    @Get("me/status")
+    @Roles(UserRole.DRIVER)
+    getMyStatus(
+        @CurrentUser() user: AuthUser,
+    ) {
+        return this.driversService.getMyStatus(
+            user.userId,
+        );
+    }
+
     @Patch('me/status')
-    @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.DRIVER)
     updateStatus(
         @CurrentUser() user: AuthUser,
