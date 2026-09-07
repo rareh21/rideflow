@@ -4,7 +4,7 @@ export const Permissions = {
     ACCOUNT_NOTIFICATIONS_MANAGE:
         "account.notifications.manage",
     ACCOUNT_PRIVACY_MANAGE:
-    "account.privacy.manage",
+        "account.privacy.manage",
     ACCOUNT_SECURITY_MANAGE:
         "account.security.manage",
     ACCOUNT_HELP_VIEW: "account.help.view",
@@ -26,6 +26,7 @@ export const Permissions = {
         "rider.payment.view",
     RIDER_PAYMENT_MANAGE:
         "rider.payment.manage",
+    DRIVER_APPLICATION_CREATE: "driver.application.create",
 
     DRIVER_DASHBOARD_VIEW:
         "driver.dashboard.view",

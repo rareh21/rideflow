@@ -23,6 +23,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
         Permissions.RIDER_SAVED_PLACES_MANAGE,
         Permissions.RIDER_PAYMENT_VIEW,
         Permissions.RIDER_PAYMENT_MANAGE,
+        Permissions.DRIVER_APPLICATION_CREATE
     ],
 
     [UserRole.DRIVER]: [

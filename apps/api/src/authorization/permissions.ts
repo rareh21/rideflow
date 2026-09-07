@@ -17,6 +17,7 @@ export const Permissions = {
     RIDER_SAVED_PLACES_MANAGE: "rider.saved_places.manage",
     RIDER_PAYMENT_VIEW: "rider.payment.view",
     RIDER_PAYMENT_MANAGE: "rider.payment.manage",
+    DRIVER_APPLICATION_CREATE: "driver.application.create",
 
     // Driver
     DRIVER_DASHBOARD_VIEW: "driver.dashboard.view",
