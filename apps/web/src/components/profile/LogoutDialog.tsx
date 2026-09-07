@@ -39,12 +39,12 @@ export function LogoutDialog({
     return (
         <div
             className="
-        fixed inset-0 z-50
-        flex items-end justify-center
-        bg-[var(--rf-midnight)]/55
-        p-4
-        sm:items-center
-      "
+                fixed inset-0 z-50
+                flex items-end justify-center
+                bg-[var(--rf-midnight)]/55
+                p-4
+                sm:items-center
+            "
             role="dialog"
             aria-modal="true"
             aria-labelledby="logout-dialog-title"
@@ -57,25 +57,25 @@ export function LogoutDialog({
         >
             <div
                 className="
-          w-full max-w-md
-          rounded-[2rem]
-          border border-[var(--rf-border)]
-          bg-[var(--rf-surface)]
-          p-6
-          shadow-2xl
-        "
+                w-full max-w-md
+                rounded-[2rem]
+                border border-[var(--rf-border)]
+                bg-[var(--rf-surface)]
+                p-6
+                shadow-2xl
+                "
                 onMouseDown={(event) => event.stopPropagation()}
             >
                 {/* Icon / Close */}
                 <div className="flex items-start justify-between">
                     <div
                         className="
-              flex h-12 w-12
-              items-center justify-center
-              rounded-2xl
-              bg-red-50
-              text-[var(--rf-danger)]
-            "
+                        flex h-12 w-12
+                        items-center justify-center
+                        rounded-2xl
+                        bg-red-50
+                        text-[var(--rf-danger)]
+                        "
                     >
                         <LogOut size={22} />
                     </div>
@@ -86,19 +86,19 @@ export function LogoutDialog({
                         disabled={loading}
                         aria-label="Close logout confirmation"
                         className="
-              flex h-9 w-9
-              items-center justify-center
-              rounded-full
-              text-[var(--rf-muted)]
-              transition
-              hover:bg-[var(--rf-surface-muted)]
-              hover:text-[var(--rf-text)]
-              focus-visible:outline-none
-              focus-visible:ring-2
-              focus-visible:ring-[var(--rf-green)]
-              disabled:cursor-not-allowed
-              disabled:opacity-50
-            "
+                        flex h-9 w-9
+                        items-center justify-center
+                        rounded-full
+                        text-[var(--rf-muted)]
+                        transition
+                        hover:bg-[var(--rf-surface-muted)]
+                        hover:text-[var(--rf-text)]
+                        focus-visible:outline-none
+                        focus-visible:ring-2
+                        focus-visible:ring-[var(--rf-green)]
+                        disabled:cursor-not-allowed
+                        disabled:opacity-50
+                        "
                     >
                         <X size={18} />
                     </button>

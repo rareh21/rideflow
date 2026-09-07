@@ -10,36 +10,6 @@ export default function RiderPage() {
     <main className="min-h-screen bg-rf-surface-muted text-rf-text">
       <div className="mx-auto min-h-screen max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
 
-        {/* Header */}
-        <header className="flex items-center justify-between rounded-2xl bg-rf-midnight px-5 py-4 shadow-sm">
-          <Link
-            href="/rider"
-            className="text-lg font-bold tracking-tight text-rf-green"
-          >
-            RIDEFLOW
-          </Link>
-
-          <div className="flex items-center gap-4">
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-semibold text-white">
-                Hyderabad
-              </p>
-
-              <p className="text-xs text-white/60">
-                Current location
-              </p>
-            </div>
-
-            <Link
-              href="/profile"
-              aria-label="Open profile"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white transition hover:bg-white/20"
-            >
-              {user?.userId?.charAt(0).toUpperCase() ?? "U"}
-            </Link>
-          </div>
-        </header>
-
         {/* Main */}
         <section className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
 

@@ -120,10 +120,6 @@ export function AuthProvider({
             );
 
             setUser(null);
-
-            window.location.replace(
-                "/login"
-            );
         }
     }, []);
 
