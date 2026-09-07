@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import type { NavigationItem } from "@/config/navigation";
+import { isNavigationItemActive } from "@/lib/navigation";
 
 interface AppSidebarProps {
     items: NavigationItem[];
@@ -50,12 +51,10 @@ export function AppSidebar({
                     {items.map((item) => {
                         const Icon = item.icon;
 
-                        const active =
-                            pathname === item.href ||
-                            pathname.startsWith(
-                                `${item.href}/`
-                            );
-
+                        const active = isNavigationItemActive(
+                            pathname,
+                            item.href,
+                        );
                         return (
                             <Link
                                 key={item.href}
@@ -76,13 +75,12 @@ export function AppSidebar({
                                     font-medium
                                     transition
 
-                                    ${
-                                        active
-                                            ? `
+                                    ${active
+                                        ? `
                                                 bg-[var(--rf-green)]/10
                                                 text-[var(--rf-midnight)]
                                             `
-                                            : `
+                                        : `
                                                 text-[var(--rf-muted)]
                                                 hover:bg-[var(--rf-surface-muted)]
                                                 hover:text-[var(--rf-midnight)]

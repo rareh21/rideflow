@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import type { NavigationItem } from "@/config/navigation";
+import { isNavigationItemActive } from "@/lib/navigation";
 
 interface MobileBottomNavProps {
     items: NavigationItem[];
@@ -50,11 +51,10 @@ export function MobileBottomNav({
                 {visibleItems.map((item) => {
                     const Icon = item.icon;
 
-                    const active =
-                        pathname === item.href ||
-                        pathname.startsWith(
-                            `${item.href}/`
-                        );
+                    const active = isNavigationItemActive(
+                        pathname,
+                        item.href,
+                    );
 
                     return (
                         <Link
