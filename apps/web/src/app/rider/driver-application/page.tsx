@@ -417,16 +417,29 @@ export default function DriverApplicationPage() {
                     {/* Rejected */}
                     {isRejected && (
                         <div className="mt-6">
-                            <h2 className="text-lg font-bold text-[var(--rf-midnight)]">
-                                Application needs attention
-                            </h2>
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <h2 className="text-lg font-bold text-[var(--rf-midnight)]">
+                                        Application needs attention
+                                    </h2>
 
-                            <p className="mt-2 text-sm leading-6 text-[var(--rf-muted)]">
-                                Your application wasn't approved this
-                                time. Review the reason below and submit
-                                your application again.
-                            </p>
+                                    <p className="mt-2 text-sm leading-6 text-[var(--rf-muted)]">
+                                        Your application wasn't approved
+                                        this time. Review the feedback
+                                        below and submit your application
+                                        again.
+                                    </p>
+                                </div>
 
+                                <div className="hidden shrink-0 rounded-xl bg-red-50 p-3 sm:block">
+                                    <RotateCcw
+                                        size={20}
+                                        className="text-[var(--rf-danger)]"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Rejection feedback */}
                             <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4">
                                 <p className="text-xs font-bold uppercase tracking-wider text-red-700">
                                     Review feedback
@@ -435,6 +448,19 @@ export default function DriverApplicationPage() {
                                 <p className="mt-2 text-sm leading-6 text-red-800">
                                     {application.rejectionReason ??
                                         "Your application was not approved."}
+                                </p>
+                            </div>
+
+                            {/* Reapply information */}
+                            <div className="mt-5 rounded-2xl border border-[var(--rf-border)] bg-[var(--rf-surface-muted)] p-4">
+                                <p className="text-sm font-semibold text-[var(--rf-midnight)]">
+                                    Ready to try again?
+                                </p>
+
+                                <p className="mt-1 text-sm leading-6 text-[var(--rf-muted)]">
+                                    Review your driver details, make any
+                                    necessary corrections, and submit
+                                    your application again for review.
                                 </p>
                             </div>
 
