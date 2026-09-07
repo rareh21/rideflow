@@ -21,6 +21,7 @@ import { CreateDriverApplicationDto } from "./dto/create-driver-application.dto"
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthUser } from "../auth/types/auth-user.type";
 import { ReviewDriverApplicationDto } from "./dto/review-driver-application.dto";
+import { UpdateDriverStatusDto } from "./dto/update-driver-status.dto";
 
 @Controller("drivers")
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -89,6 +90,26 @@ export class DriversController {
             id,
             req.user.userId,
             dto,
+        );
+    }
+
+    @Get('me')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.DRIVER)
+    getMyDriver(@CurrentUser() user: AuthUser) {
+        return this.driversService.getMyDriver(user.userId);
+    }
+
+    @Patch('me/status')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.DRIVER)
+    updateStatus(
+        @CurrentUser() user: AuthUser,
+        @Body() dto: UpdateDriverStatusDto,
+    ) {
+        return this.driversService.updateStatus(
+            user.userId,
+            dto.status,
         );
     }
 }

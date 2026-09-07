@@ -11,7 +11,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CreateDriverDto } from "./dto/create-driver.dto";
 import { CreateDriverApplicationDto } from "./dto/create-driver-application.dto";
 import { ReviewDriverApplicationDto } from "./dto/review-driver-application.dto";
-import { UserRole } from "@prisma/client";
+import { DriverStatus, UserRole } from "@prisma/client";
 
 @Injectable()
 export class DriversService {
@@ -305,6 +305,75 @@ export class DriversService {
                     },
                 },
             });
+        });
+    }
+
+    async getMyDriver(userId: string) {
+        const driver = await this.prisma.driver.findUnique({
+            where: { userId },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        role: true,
+                    },
+                },
+                vehicle: true,
+            },
+        });
+
+        if (!driver) {
+            throw new NotFoundException('Driver profile not found');
+        }
+
+        return driver;
+    }
+
+    async updateStatus(
+        userId: string,
+        requestedStatus: DriverStatus,  
+    ) {
+        const driver = await this.prisma.driver.findUnique({
+            where: { userId },
+        });
+
+        if (!driver) {
+            throw new NotFoundException('Driver profile not found');
+        }
+
+        if (driver.status === requestedStatus) {
+            return driver;
+        }
+
+        const allowedTransitions: Record<
+            DriverStatus,
+            DriverStatus[]
+        > = {
+            OFFLINE: [DriverStatus.AVAILABLE],
+            AVAILABLE: [
+                DriverStatus.OFFLINE,
+                DriverStatus.BUSY,
+            ],
+            BUSY: [DriverStatus.AVAILABLE],
+        };
+
+        if (
+            !allowedTransitions[driver.status].includes(
+                requestedStatus,
+            )
+        ) {
+            throw new BadRequestException(
+                `Invalid driver status transition: ${driver.status} → ${requestedStatus}`,
+            );
+        }
+
+        return this.prisma.driver.update({
+            where: { id: driver.id },
+            data: {
+                status: requestedStatus,
+            },
         });
     }
 }

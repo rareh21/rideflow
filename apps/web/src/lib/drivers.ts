@@ -20,3 +20,43 @@ export async function getDriverApplication() {
         "/drivers/application",
     );
 }
+
+export type DriverStatus =
+  | 'OFFLINE'
+  | 'AVAILABLE'
+  | 'BUSY';
+
+export type DriverVehicle = {
+  id: string;
+  make: string;
+  model: string;
+  year: number;
+  plateNumber: string;
+};
+
+export type DriverProfile = {
+  id: string;
+  userId: string;
+  licenseNumber: string | null;
+  status: DriverStatus;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: 'DRIVER';
+  };
+  vehicle: DriverVehicle | null;
+};
+
+export async function getMyDriver() {
+  return api<DriverProfile>('/drivers/me');
+}
+
+export async function updateDriverStatus(
+  status: DriverStatus,
+) {
+  return api<DriverProfile>('/drivers/me/status', {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}

@@ -9,9 +9,10 @@ import { DriversModule } from './drivers/drivers.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { UsersModule } from './users/users.module';
 import { RidesModule } from "./rides/rides.module";
+import { AuthorizationModule } from "./authorization/authorization.module";
 
 @Module({
-  imports: [PrismaModule, AuthModule, DriversModule, VehiclesModule, UsersModule, RidesModule],
+  imports: [PrismaModule, AuthModule, DriversModule, VehiclesModule, UsersModule, RidesModule, AuthorizationModule],
   controllers: [AppController, UsersController],
   providers: [AppService, UsersService],
 })

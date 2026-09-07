@@ -19,6 +19,9 @@ import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 import { CreateSavedPlaceDto } from "./dto/create-saved-place.dto";
 import { UpdateSavedPlaceDto } from "./dto/update-saved-place.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
+import { RequirePermission } from "../authorization/require-permission.decorator";
+import { PermissionsGuard } from "../authorization/permissions.guard";
+import { Permissions } from "../authorization/permissions";
 
 @Controller("users")
 @UseGuards(JwtAuthGuard)
@@ -43,6 +46,13 @@ export class UsersController {
 		);
 	}
 
+	@UseGuards(
+		JwtAuthGuard,
+		PermissionsGuard,
+	)
+	@RequirePermission(
+		Permissions.ACCOUNT_NOTIFICATIONS_MANAGE,
+	)
 	@Get("me/preferences")
 	getPreferences(@Request() req: any) {
 		return this.usersService.getPreferences(
@@ -50,6 +60,13 @@ export class UsersController {
 		);
 	}
 
+	@UseGuards(
+		JwtAuthGuard,
+		PermissionsGuard,
+	)
+	@RequirePermission(
+		Permissions.ACCOUNT_NOTIFICATIONS_MANAGE,
+	)
 	@Patch("me/preferences")
 	updatePreferences(
 		@Request() req: any,
@@ -61,13 +78,28 @@ export class UsersController {
 		);
 	}
 
+	@UseGuards(
+		JwtAuthGuard,
+		PermissionsGuard,
+	)
+	@RequirePermission(
+		Permissions.RIDER_SAVED_PLACES_VIEW,
+	)
 	@Get("me/saved-places")
+	@RequirePermission(Permissions.RIDER_SAVED_PLACES_VIEW)
 	async getSavedPlaces(
 		@CurrentUser() user: AuthUser,
 	) {
 		return this.usersService.getSavedPlaces(user.userId);
 	}
 
+	@UseGuards(
+		JwtAuthGuard,
+		PermissionsGuard,
+	)
+	@RequirePermission(
+		Permissions.RIDER_SAVED_PLACES_VIEW,
+	)
 	@Post("me/saved-places")
 	async createSavedPlace(
 		@CurrentUser() user: AuthUser,
@@ -79,6 +111,13 @@ export class UsersController {
 		);
 	}
 
+	@UseGuards(
+		JwtAuthGuard,
+		PermissionsGuard,
+	)
+	@RequirePermission(
+		Permissions.RIDER_SAVED_PLACES_VIEW,
+	)
 	@Patch("me/saved-places/:placeId")
 	async updateSavedPlace(
 		@CurrentUser() user: AuthUser,
@@ -92,6 +131,13 @@ export class UsersController {
 		);
 	}
 
+	@UseGuards(
+		JwtAuthGuard,
+		PermissionsGuard,
+	)
+	@RequirePermission(
+		Permissions.RIDER_SAVED_PLACES_VIEW,
+	)
 	@Delete("me/saved-places/:placeId")
 	async deleteSavedPlace(
 		@CurrentUser() user: AuthUser,

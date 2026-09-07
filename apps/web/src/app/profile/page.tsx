@@ -21,6 +21,10 @@ import { ProfileSkeleton } from "@/components/profile/ProfileSkeleton";
 import { LogoutDialog } from "@/components/profile/LogoutDialog";
 import { useAuth } from "@/context/auth-context";
 import { getUserProfile, UserProfile } from "@/lib/users";
+import { Can } from "@/authorization/Can";
+import { Permissions } from "@/authorization/permissions";
+import { PROFILE_NAVIGATION } from "@/config/profile-navigation";
+import { ProfileNavigation } from "@/components/profile/ProfileNavigation";
 
 export default function ProfilePage() {
     const { logout } = useAuth();
@@ -90,62 +94,7 @@ export default function ProfilePage() {
                         />
 
                         <div className="mt-8 space-y-6">
-                            <ProfileSection title="Personal">
-                                <ProfileMenuItem
-                                    href="/profile/edit"
-                                    icon={UserRound}
-                                    title="Personal information"
-                                    description="Manage your name and account details"
-                                />
-
-                                <ProfileMenuItem
-                                    href="/profile/saved-places"
-                                    icon={MapPin}
-                                    title="Saved places"
-                                    description="Home, work and favorite locations"
-                                />
-                            </ProfileSection>
-
-                            <ProfileSection title="Payments">
-                                <ProfileMenuItem
-                                    href="/profile/payment-settings"
-                                    icon={CreditCard}
-                                    title="Payment settings"
-                                    description="Manage your preferred payment method"
-                                />
-                            </ProfileSection>
-
-                            <ProfileSection title="Preferences">
-                                <ProfileMenuItem
-                                    href="/profile/preferences"
-                                    icon={Bell}
-                                    title="Notifications"
-                                    description="Manage your RideFlow notifications"
-                                />
-
-                                <ProfileMenuItem
-                                    href="/profile/privacy"
-                                    icon={Shield}
-                                    title="Privacy"
-                                    description="Manage privacy preferences"
-                                />
-
-                                <ProfileMenuItem
-                                    href="/profile/security"
-                                    icon={Lock}
-                                    title="Security"
-                                    description="Manage account security"
-                                />
-                            </ProfileSection>
-
-                            <ProfileSection title="Support">
-                                <ProfileMenuItem
-                                    href="/profile/help-support"
-                                    icon={HelpCircle}
-                                    title="Help & support"
-                                    description="Get help with RideFlow"
-                                />
-                            </ProfileSection>
+                            <ProfileNavigation />
 
                             <button
                                 type="button"

@@ -8,6 +8,7 @@ import * as bcrypt from "bcrypt";
 import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
 import { JwtService } from "@nestjs/jwt/dist/jwt.service";
+import { UserRole } from "@prisma/client/edge";
 
 @Injectable()
 export class AuthService {
@@ -17,9 +18,13 @@ export class AuthService {
     ) { }
 
     async register(dto: RegisterDto) {
-        const existingUser = await this.prisma.user.findUnique({
+        const email = dto.email.trim().toLowerCase();
+        const existingUser = await this.prisma.user.findFirst({
             where: {
-                email: dto.email,
+                email: {
+                    equals: email,
+                    mode: "insensitive",
+                },
             },
         });
 
@@ -31,9 +36,10 @@ export class AuthService {
 
         const user = await this.prisma.user.create({
             data: {
-                name: dto.name,
-                email: dto.email,
+                name: dto.name.trim(),
+                email: email,
                 passwordHash,
+                role: UserRole.RIDER,
             },
             select: {
                 id: true,
@@ -48,11 +54,16 @@ export class AuthService {
     }
 
     async login(dto: LoginDto) {
-        const user = await this.prisma.user.findUnique({
-            where: {
-                email: dto.email,
-            },
-        });
+        const email = dto.email.trim().toLowerCase();
+        const user =
+            await this.prisma.user.findFirst({
+                where: {
+                    email: {
+                        equals: email,
+                        mode: "insensitive",
+                    },
+                },
+            });
 
         if (!user) {
             throw new UnauthorizedException("Invalid credentials");
