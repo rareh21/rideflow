@@ -37,10 +37,12 @@ export function AppShell({
         router,
     ]);
 
+    // Public pages do not use the application shell.
     if (isPublicRoute) {
         return <>{children}</>;
     }
 
+    // Wait for authentication to resolve.
     if (loading) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-[var(--rf-surface-muted)]">
@@ -51,17 +53,16 @@ export function AppShell({
         );
     }
 
+    // Prevent protected content from rendering after logout/session expiry.
     if (!user) {
         return null;
     }
 
-    const navigation =
-        NAVIGATION_BY_ROLE[user.role];
+    const navigation = NAVIGATION_BY_ROLE[user.role];
 
-    const visibleNavigation =
-        navigation.filter((item) =>
-            hasPermission(item.permission)
-        );
+    const visibleNavigation = navigation.filter((item) =>
+        hasPermission(item.permission)
+    );
 
     return (
         <div className="min-h-screen bg-[var(--rf-surface-muted)]">
