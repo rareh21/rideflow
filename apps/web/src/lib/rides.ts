@@ -1,22 +1,6 @@
 import { api } from "./api";
-import type { RideCategory } from "@/types/ride";
 
-export type CreateRideRequest = {
-    pickupLocationId: string;
-    destinationLocationId: string;
-    rideType: RideCategory;
-    estimatedFare: number;
-    estimatedDistanceKm: number;
-    estimatedDurationMinutes: number;
-    paymentMethod?: "UPI" | "CARD" | "CASH";
-};
-
-export type Ride = {
-    id: string;
-    riderId: string;
-    driverId: string | null;
-    rideType: RideCategory;
-    status:
+export type RideStatus =
     | "REQUESTED"
     | "SEARCHING_DRIVER"
     | "DRIVER_ASSIGNED"
@@ -24,16 +8,88 @@ export type Ride = {
     | "IN_PROGRESS"
     | "COMPLETED"
     | "CANCELLED";
-    estimatedFare: number | string;
-    estimatedDistanceKm: number | string;
+
+export type RideType =
+    | "GO"
+    | "PLUS"
+    | "XL";
+
+export type PaymentMethod =
+    | "UPI"
+    | "CARD"
+    | "CASH";
+
+export type RideLocation = {
+    id: string;
+    label: string;
+    latitude: string;
+    longitude: string;
+};
+
+export type RideVehicle = {
+    make: string;
+    model: string;
+    year: number;
+    plateNumber: string;
+};
+
+export type RideDriver = {
+    id: string;
+    status: string;
+    user: {
+        id: string;
+        name: string;
+    };
+    vehicle: RideVehicle | null;
+};
+
+export type RideRider = {
+    id: string;
+    name: string;
+    email: string;
+};
+
+export type Ride = {
+    id: string;
+    riderId: string;
+    driverId: string | null;
+
+    pickupLocationId: string;
+    destinationLocationId: string;
+
+    rideType: RideType;
+    status: RideStatus;
+
+    estimatedFare: string;
+    estimatedDistanceKm: string;
     estimatedDurationMinutes: number;
-    paymentMethod: "UPI" | "CARD" | "CASH" | null;
+
+    paymentMethod:
+    | PaymentMethod
+    | null;
+
+    pickupLocation: RideLocation;
+    destinationLocation: RideLocation;
+
+    rider?: RideRider;
+    driver: RideDriver | null;
+
     createdAt: string;
     updatedAt: string;
 };
 
+export type CreateRidePayload = {
+    pickupLocationId: string;
+    destinationLocationId: string;
+    rideType: RideType;
+    estimatedFare: number;
+    estimatedDistanceKm: number;
+    estimatedDurationMinutes: number;
+    paymentMethod?: PaymentMethod;
+};
+
 export async function createRide(
-    payload: CreateRideRequest,
+    payload: CreateRidePayload,
 ) {
     return api<Ride>("/rides", {
         method: "POST",
@@ -41,10 +97,42 @@ export async function createRide(
     });
 }
 
+export async function getMyRides() {
+    return api<Ride[]>("/rides/me");
+}
+
+export async function getDriverRides() {
+    return api<Ride[]>("/rides/driver");
+}
+
 export async function getRide(
     rideId: string,
 ) {
     return api<Ride>(
         `/rides/${rideId}`,
+    );
+}
+
+export async function updateRideStatus(
+    rideId: string,
+    status: RideStatus,
+) {
+    return api<Ride>(
+        `/rides/${rideId}/status`,
+        {
+            method: "PATCH",
+            body: JSON.stringify({
+                status,
+            }),
+        },
+    );
+}
+
+export async function cancelRide(
+    rideId: string,
+) {
+    return updateRideStatus(
+        rideId,
+        "CANCELLED",
     );
 }
