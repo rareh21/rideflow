@@ -17,6 +17,9 @@ import {
     getDriverRides,
     type Ride,
     type RideStatus,
+    acceptRide,
+    getRideRequests,
+    type RideRequest
 } from "@/lib/rides";
 
 const STATUS_CONFIG: Record<
@@ -87,6 +90,15 @@ export default function DriverRidesPage() {
     const [error, setError] =
         useState<string | null>(null);
 
+    const [requests, setRequests] =
+        useState<RideRequest[]>([]);
+
+    const [acceptingRideId, setAcceptingRideId] =
+        useState<string | null>(null);
+
+    const [requestError, setRequestError] =
+        useState<string | null>(null);
+
     async function loadRides() {
         try {
             setLoading(true);
@@ -107,13 +119,140 @@ export default function DriverRidesPage() {
         }
     }
 
+    async function loadRideRequests() {
+        try {
+            setRequestError(null);
+
+            const data =
+                await getRideRequests();
+
+            setRequests(data);
+        } catch (err) {
+            setRequestError(
+                err instanceof Error
+                    ? err.message
+                    : "Unable to load ride requests.",
+            );
+        }
+    }
+
     useEffect(() => {
-        void loadRides();
+        void Promise.all([
+            loadRides(),
+            loadRideRequests(),
+        ]);
     }, []);
+
+    async function handleAcceptRide(
+        rideId: string,
+    ) {
+        try {
+            setAcceptingRideId(rideId);
+            setRequestError(null);
+
+            await acceptRide(rideId);
+
+            /*
+             * Refresh both sections because
+             * the accepted ride moves from
+             * requests → assigned rides.
+             */
+            await Promise.all([
+                loadRides(),
+                loadRideRequests(),
+            ]);
+        } catch (err) {
+            setRequestError(
+                err instanceof Error
+                    ? err.message
+                    : "Unable to accept the ride.",
+            );
+        } finally {
+            setAcceptingRideId(null);
+        }
+    }
 
     return (
         <main className="min-h-full bg-[var(--rf-surface-muted)]">
             <div className="mx-auto max-w-4xl px-4 py-8 pb-28 sm:px-6 lg:py-10 lg:pb-10">
+                <section className="mt-8">
+                    <div className="flex items-end justify-between gap-4">
+                        <div>
+                            <p className="text-xs font-bold uppercase tracking-wider text-[var(--rf-green-dark)]">
+                                Available now
+                            </p>
+
+                            <h2 className="mt-1 text-xl font-bold text-[var(--rf-midnight)]">
+                                Ride requests
+                            </h2>
+
+                            <p className="mt-1 text-sm text-[var(--rf-muted)]">
+                                Accept a nearby ride when
+                                you're ready to drive.
+                            </p>
+                        </div>
+
+                        {requests.length > 0 && (
+                            <span className="rounded-full bg-[var(--rf-green)]/10 px-3 py-1 text-xs font-bold text-[var(--rf-green-dark)]">
+                                {requests.length}{" "}
+                                {requests.length === 1
+                                    ? "request"
+                                    : "requests"}
+                            </span>
+                        )}
+                    </div>
+
+                    {requestError && (
+                        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
+                            <p className="text-sm text-red-800">
+                                {requestError}
+                            </p>
+                        </div>
+                    )}
+
+                    {requests.length === 0 ? (
+                        <div className="mt-4 rounded-3xl border border-[var(--rf-border)] bg-[var(--rf-surface)] p-6">
+                            <div className="flex items-start gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--rf-surface-muted)]">
+                                    <Car
+                                        size={19}
+                                        className="text-[var(--rf-muted)]"
+                                    />
+                                </div>
+
+                                <div>
+                                    <h3 className="font-semibold text-[var(--rf-midnight)]">
+                                        No ride requests
+                                    </h3>
+
+                                    <p className="mt-1 text-sm leading-5 text-[var(--rf-muted)]">
+                                        New ride requests will
+                                        appear here when you're
+                                        available.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="mt-4 space-y-4">
+                            {requests.map((ride) => (
+                                <RideRequestCard
+                                    key={ride.id}
+                                    ride={ride}
+                                    accepting={
+                                        acceptingRideId ===
+                                        ride.id
+                                    }
+                                    onAccept={() =>
+                                        void handleAcceptRide(
+                                            ride.id,
+                                        )
+                                    }
+                                />
+                            ))}
+                        </div>
+                    )}
+                </section>
                 <header>
                     <p className="text-xs font-bold uppercase tracking-wider text-[var(--rf-green-dark)]">
                         Driver
@@ -311,4 +450,131 @@ function formatDate(
             timeStyle: "short",
         },
     ).format(new Date(value));
+}
+
+function RideRequestCard({
+    ride,
+    accepting,
+    onAccept,
+}: {
+    ride: RideRequest;
+    accepting: boolean;
+    onAccept: () => void;
+}) {
+    return (
+        <div className="rounded-3xl border border-[var(--rf-border)] bg-[var(--rf-surface)] p-5 shadow-sm sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <p className="text-xs font-semibold text-[var(--rf-muted)]">
+                        Ride request
+                    </p>
+
+                    <h3 className="mt-1 font-bold text-[var(--rf-midnight)]">
+                        {ride.rider.name}
+                    </h3>
+                </div>
+
+                <span className="rounded-full bg-[var(--rf-green)]/10 px-3 py-1.5 text-xs font-bold text-[var(--rf-green-dark)]">
+                    {ride.rideType}
+                </span>
+            </div>
+
+            <div className="mt-5 space-y-3">
+                <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--rf-surface-muted)]">
+                        <MapPin
+                            size={16}
+                            className="text-[var(--rf-green-dark)]"
+                        />
+                    </div>
+
+                    <p className="truncate text-sm font-medium text-[var(--rf-midnight)]">
+                        {
+                            ride
+                                .pickupLocation
+                                .label
+                        }
+                    </p>
+                </div>
+
+                <div className="ml-4 h-3 border-l border-dashed border-[var(--rf-border)]" />
+
+                <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--rf-surface-muted)]">
+                        <MapPin
+                            size={16}
+                            className="text-[var(--rf-midnight)]"
+                        />
+                    </div>
+
+                    <p className="truncate text-sm font-medium text-[var(--rf-midnight)]">
+                        {
+                            ride
+                                .destinationLocation
+                                .label
+                        }
+                    </p>
+                </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-[var(--rf-surface-muted)] p-3">
+                    <p className="text-xs text-[var(--rf-muted)]">
+                        Distance
+                    </p>
+
+                    <p className="mt-1 text-sm font-bold text-[var(--rf-midnight)]">
+                        {
+                            ride.estimatedDistanceKm
+                        }{" "}
+                        km
+                    </p>
+                </div>
+
+                <div className="rounded-2xl bg-[var(--rf-surface-muted)] p-3">
+                    <p className="text-xs text-[var(--rf-muted)]">
+                        Estimated fare
+                    </p>
+
+                    <p className="mt-1 text-sm font-bold text-[var(--rf-midnight)]">
+                        ₹
+                        {
+                            ride.estimatedFare
+                        }
+                    </p>
+                </div>
+            </div>
+
+            <button
+                type="button"
+                disabled={accepting}
+                onClick={onAccept}
+                className="
+                    mt-5 flex min-h-12 w-full
+                    items-center justify-center
+                    gap-2 rounded-2xl
+                    bg-[var(--rf-green)]
+                    px-5
+                    text-sm font-bold
+                    text-[var(--rf-midnight)]
+                    transition
+                    hover:bg-[var(--rf-green-dark)]
+                    disabled:cursor-not-allowed
+                    disabled:opacity-60
+                "
+            >
+                {accepting ? (
+                    <>
+                        <Loader2
+                            size={17}
+                            className="animate-spin"
+                        />
+                        Accepting...
+                    </>
+                ) : (
+                    "Accept ride"
+                )}
+            </button>
+        </div>
+    );
 }

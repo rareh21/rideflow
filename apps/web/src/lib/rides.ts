@@ -136,3 +136,30 @@ export async function cancelRide(
         "CANCELLED",
     );
 }
+
+export type RideRequest = Ride & {
+    rider: {
+        id: string;
+        name: string;
+    };
+};
+
+export async function getRideRequests() {
+    return api<RideRequest[]>(
+        "/rides/driver/requests",
+    );
+}
+
+export async function acceptRide(
+    rideId: string,
+) {
+    return api<{
+        accepted: boolean;
+        ride: Ride;
+    }>(
+        `/rides/${rideId}/accept`,
+        {
+            method: "POST",
+        },
+    );
+}

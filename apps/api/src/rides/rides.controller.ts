@@ -101,4 +101,22 @@ export class RidesController {
             rideId,
         );
     }
+
+    @Get("driver/requests")
+    @Roles(UserRole.DRIVER)
+    getRideRequests() {
+        return this.ridesService.getAvailableRideRequests();
+    }
+
+    @Post(":id/accept")
+    @Roles(UserRole.DRIVER)
+    acceptRide(
+        @Param("id") rideId: string,
+        @CurrentUser() user: AuthUser,
+    ) {
+        return this.ridesService.acceptRide(
+            rideId,
+            user.userId,
+        );
+    }
 }

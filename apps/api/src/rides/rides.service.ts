@@ -275,9 +275,9 @@ export class RidesService {
 
                 include: {
                     driver: {
-                        select: {
-                            id: true,
-                            userId: true,
+                select: {
+                    id: true,
+                    userId: true,
                         },
                     },
                 },
@@ -308,14 +308,14 @@ export class RidesService {
          * Rider can cancel the ride.
          */
         if (isRider) {
-            if (
+        if (
                 nextStatus !==
                 RideStatus.CANCELLED
-            ) {
-                throw new ForbiddenException(
+        ) {
+            throw new ForbiddenException(
                     "Rider cannot perform this ride status transition",
-                );
-            }
+            );
+        }
         }
 
         /*
@@ -533,6 +533,167 @@ export class RidesService {
         return {
             assigned: true,
             ride: updatedRide,
+        };
+    }
+
+    async getAvailableRideRequests() {
+        return this.prisma.ride.findMany({
+            where: {
+                status: RideStatus.SEARCHING_DRIVER,
+                driverId: null,
+            },
+
+            orderBy: {
+                createdAt: "asc",
+            },
+
+            include: {
+                pickupLocation: true,
+
+                destinationLocation: true,
+
+                rider: {
+                    select: {
+                        id: true,
+                        name: true,
+                    },
+                },
+            },
+        });
+    }
+
+    async acceptRide(
+        rideId: string,
+        userId: string,
+    ) {
+        const driver =
+            await this.prisma.driver.findUnique({
+                where: {
+                    userId,
+                },
+            });
+
+        if (!driver) {
+            throw new NotFoundException(
+                "Driver profile not found",
+            );
+        }
+
+        if (driver.status !== "AVAILABLE") {
+            throw new BadRequestException(
+                "Driver must be available to accept a ride",
+            );
+        }
+
+        const acceptedRide =
+            await this.prisma.$transaction(
+                async (tx) => {
+                    /*
+                     * Claim the driver first.
+                     *
+                     * updateMany makes the operation
+                     * atomic against another request
+                     * trying to claim the same driver.
+                     */
+                    const claimedDriver =
+                        await tx.driver.updateMany({
+                            where: {
+                                id: driver.id,
+                                status: "AVAILABLE",
+                            },
+
+                            data: {
+                                status: "BUSY",
+                            },
+                        });
+
+                    if (
+                        claimedDriver.count !== 1
+                    ) {
+                        throw new BadRequestException(
+                            "Driver is no longer available",
+                        );
+                    }
+
+                    /*
+                     * Claim the ride only if it is
+                     * still waiting for a driver.
+                     */
+                    const claimedRide =
+                        await tx.ride.updateMany({
+                            where: {
+                                id: rideId,
+                                status:
+                                    RideStatus.SEARCHING_DRIVER,
+                                driverId: null,
+                            },
+
+                            data: {
+                                driverId:
+                                    driver.id,
+
+                                status:
+                                    RideStatus.DRIVER_ASSIGNED,
+                            },
+                        });
+
+                    if (
+                        claimedRide.count !== 1
+                    ) {
+                        throw new BadRequestException(
+                            "Ride is no longer available",
+                        );
+                    }
+
+                    return tx.ride.findUnique({
+                        where: {
+                            id: rideId,
+                        },
+
+                        include: {
+                            pickupLocation: true,
+
+                            destinationLocation:
+                                true,
+
+                            rider: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    email: true,
+                                },
+                            },
+
+                            driver: {
+                                select: {
+                                    id: true,
+                                    status: true,
+
+                                    user: {
+                                        select: {
+                                            id: true,
+                                            name: true,
+                                        },
+                                    },
+
+                                    vehicle: {
+                                        select: {
+                                            make: true,
+                                            model: true,
+                                            year: true,
+                                            plateNumber: true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    });
+                },
+            );
+
+        return {
+            accepted: true,
+            ride: acceptedRide,
         };
     }
 }
