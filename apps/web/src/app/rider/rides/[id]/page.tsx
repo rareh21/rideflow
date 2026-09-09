@@ -21,6 +21,7 @@ import {
     RideStatus,
     type Ride,
 } from "@/lib/rides";
+import { subscribeToRideUpdates } from "@/lib/ride-realtime";
 
 import { Button } from "@/components/ui/button";
 
@@ -43,9 +44,13 @@ export default function RideDetailsPage() {
     const [error, setError] =
         useState<string | null>(null);
 
-    async function loadRide() {
+    async function loadRide(
+        showLoading = true,
+    ) {
         try {
-            setLoading(true);
+            if (showLoading) {
+                setLoading(true);
+            }
             setError(null);
 
             const data =
@@ -68,6 +73,13 @@ export default function RideDetailsPage() {
             void loadRide();
         }
     }, [rideId]);
+
+    useEffect(() => subscribeToRideUpdates((event) => {
+        if (event.rideId === rideId) {
+            setRide(event.ride);
+            setError(null);
+        }
+    }), [rideId]);
 
     async function handleCancel() {
         if (!ride) {

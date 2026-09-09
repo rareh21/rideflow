@@ -6,6 +6,7 @@ import {
     Loader2,
     Radio,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import {
@@ -19,6 +20,7 @@ import type {
 } from "@/lib/drivers";
 
 import { Button } from "@/components/ui/button";
+import { subscribeToRideUpdates } from "@/lib/ride-realtime";
 
 const statusMeta: Record<
     DriverStatus,
@@ -89,6 +91,14 @@ export default function DriverAvailabilityPage() {
             active = false;
         };
     }, []);
+
+    useEffect(() => subscribeToRideUpdates(() => {
+        // Completion and cancellation restore the driver in the same database
+        // transaction. Re-read the authoritative status when either event arrives.
+        void getMyDriver()
+            .then(setDriver)
+            .catch(() => undefined);
+    }), []);
 
     async function handleStatusChange(
         nextStatus: DriverStatus,
@@ -241,10 +251,17 @@ export default function DriverAvailabilityPage() {
                                         </p>
 
                                         <p className="mt-1 text-xs leading-5 text-[var(--rf-muted)]">
-                                            Your availability will become
-                                            available again after the
-                                            current ride is completed.
+                                            Complete your active ride to become
+                                            available again. If the rider cancels,
+                                            your status will update automatically.
                                         </p>
+
+                                        <Link
+                                            href="/driver/rides"
+                                            className="mt-3 inline-flex text-sm font-semibold text-[var(--rf-green-dark)] hover:text-[var(--rf-green)]"
+                                        >
+                                            Manage active ride
+                                        </Link>
                                     </div>
                                 </div>
                             </div>

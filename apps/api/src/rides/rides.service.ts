@@ -13,13 +13,39 @@ import {
 
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateRideDto } from "./dto/create-ride.dto";
+import { RidesGateway } from "./rides.gateway";
 import { canTransitionRideStatus } from "./ride-status";
 
 @Injectable()
 export class RidesService {
     constructor(
         private readonly prisma: PrismaService,
+        private readonly ridesGateway: RidesGateway,
     ) { }
+
+    private emitRideUpdated(
+        ride: {
+            id: string;
+            status: RideStatus;
+            riderId: string;
+            driver?: {
+                userId?: string;
+                user?: { id: string };
+            } | null;
+        },
+    ) {
+        this.ridesGateway.emitRideUpdated(
+            ride.riderId,
+            ride.driver?.userId ??
+            ride.driver?.user?.id ??
+            null,
+            {
+                rideId: ride.id,
+                status: ride.status,
+                ride,
+            },
+        );
+    }
 
     async create(
         riderId: string,
@@ -67,7 +93,7 @@ export class RidesService {
             );
         }
 
-        return this.prisma.ride.create({
+        const ride = await this.prisma.ride.create({
             data: {
                 riderId,
 
@@ -101,6 +127,10 @@ export class RidesService {
                 destinationLocation: true,
             },
         });
+
+        this.emitRideUpdated(ride);
+
+        return ride;
     }
 
     async findById(
@@ -329,6 +359,7 @@ export class RidesService {
                 RideStatus.DRIVER_ARRIVING,
                 RideStatus.IN_PROGRESS,
                 RideStatus.COMPLETED,
+                RideStatus.CANCELLED,
             ];
 
             if (
@@ -351,7 +382,7 @@ export class RidesService {
             ) &&
             ride.driverId
         ) {
-            return this.prisma.$transaction(
+            const updatedRide = await this.prisma.$transaction(
                 async (tx) => {
                     const updatedRide =
                         await tx.ride.update({
@@ -407,9 +438,13 @@ export class RidesService {
                     return updatedRide;
                 },
             );
+
+            this.emitRideUpdated(updatedRide);
+
+            return updatedRide;
         }
 
-        return this.prisma.ride.update({
+        const updatedRide = await this.prisma.ride.update({
             where: {
                 id: rideId,
             },
@@ -448,6 +483,10 @@ export class RidesService {
                 },
             },
         });
+
+        this.emitRideUpdated(updatedRide);
+
+        return updatedRide;
     }
 
     async findAvailableDriver() {
@@ -564,6 +603,8 @@ export class RidesService {
                     "Driver was already assigned",
             };
         }
+
+        this.emitRideUpdated(updatedRide);
 
         return {
             assigned: true,
@@ -691,6 +732,10 @@ export class RidesService {
                 });
             },
         );
+
+        if (acceptedRide) {
+            this.emitRideUpdated(acceptedRide);
+        }
 
         return {
             accepted: true,

@@ -1,12 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-import { getRide } from "@/lib/rides";
+import { cancelRide, getRide } from "@/lib/rides";
 import type { Ride } from "@/lib/rides";
+import { subscribeToRideUpdates } from "@/lib/ride-realtime";
 
 export default function FindingDriverPage() {
+    const router = useRouter();
     const searchParams = useSearchParams();
 
     const rideId = searchParams.get("rideId") ?? "";
@@ -21,6 +24,8 @@ export default function FindingDriverPage() {
         null,
     );
 
+    const [cancelling, setCancelling] = useState(false);
+
     useEffect(() => {
         if (!rideId) {
             setError("Ride ID is missing.");
@@ -28,22 +33,84 @@ export default function FindingDriverPage() {
             return;
         }
 
+        let active = true;
+
         async function loadRide() {
             try {
                 const response = await getRide(rideId);
 
+                if (!active) {
+                    return;
+                }
+
                 setRide(response);
+
+                if (response.status !== "SEARCHING_DRIVER") {
+                    router.replace(`/rider/rides/${response.id}`);
+                }
             } catch {
-                setError(
-                    "We couldn't load your ride.",
-                );
+                if (active) {
+                    setError(
+                        "We couldn't load your ride.",
+                    );
+                }
             } finally {
-                setLoading(false);
+                if (active) {
+                    setLoading(false);
+                }
             }
         }
 
         void loadRide();
-    }, [rideId]);
+
+        const unsubscribe = subscribeToRideUpdates(
+            (event) => {
+                if (!active || event.rideId !== rideId) {
+                    return;
+                }
+
+                setRide(event.ride);
+
+                if (event.status !== "SEARCHING_DRIVER") {
+                    router.replace(`/rider/rides/${event.rideId}`);
+                }
+            },
+            () => {
+                // Reconcile after every connection/reconnection. This closes the
+                // race where a driver accepts between the initial REST load and
+                // the rider socket becoming ready.
+                void loadRide();
+            },
+        );
+
+        return () => {
+            active = false;
+            unsubscribe();
+        };
+    }, [rideId, router]);
+
+    async function handleCancel() {
+        if (!ride || cancelling) {
+            return;
+        }
+
+        try {
+            setCancelling(true);
+            setError(null);
+
+            const updatedRide = await cancelRide(ride.id);
+
+            router.replace(`/rider/rides/${updatedRide.id}`);
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "We couldn't cancel your ride. Please try again.",
+            );
+        } finally {
+            setCancelling(false);
+        }
+    }
 
     if (loading) {
         return (
@@ -96,7 +163,7 @@ export default function FindingDriverPage() {
                 </h1>
 
                 <p className="mt-2 text-sm text-rf-text-secondary">
-                    We're matching you with the right driver.
+                    We&apos;re matching you with the right driver. This screen updates automatically.
                 </p>
 
                 <div className="mt-8 rounded-2xl bg-rf-surface-muted p-5 text-left">
@@ -132,6 +199,28 @@ export default function FindingDriverPage() {
                     </div>
 
                 </div>
+
+                {error && (
+                    <p role="alert" className="mt-4 text-sm text-red-700">
+                        {error}
+                    </p>
+                )}
+
+                <button
+                    type="button"
+                    disabled={cancelling}
+                    onClick={() => void handleCancel()}
+                    className="mt-6 text-sm font-semibold text-rf-danger transition hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                    {cancelling ? "Cancelling ride..." : "Cancel ride"}
+                </button>
+
+                <Link
+                    href={`/rider/rides/${ride.id}`}
+                    className="mt-4 block text-sm font-semibold text-rf-green"
+                >
+                    View ride details
+                </Link>
 
             </section>
         </main>

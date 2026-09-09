@@ -21,6 +21,7 @@ import {
     getRideRequests,
     type RideRequest
 } from "@/lib/rides";
+import { subscribeToRideRequestChanges } from "@/lib/ride-realtime";
 
 const STATUS_CONFIG: Record<
     RideStatus,
@@ -142,6 +143,15 @@ export default function DriverRidesPage() {
             loadRideRequests(),
         ]);
     }, []);
+
+    useEffect(() => subscribeToRideRequestChanges(
+        () => {
+            void loadRideRequests();
+        },
+        () => {
+            void loadRideRequests();
+        },
+    ), []);
 
     async function handleAcceptRide(
         rideId: string,
