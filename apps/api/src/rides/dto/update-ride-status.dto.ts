@@ -1,7 +1,4 @@
-import {
-    IsEnum,
-} from "class-validator";
-
+import { IsEnum } from "class-validator";
 import { RideStatus } from "@prisma/client";
 
 export class UpdateRideStatusDto {

@@ -60,6 +60,12 @@ export class RidesController {
         );
     }
 
+    @Get("driver/requests")
+    @Roles(UserRole.DRIVER)
+    getRideRequests() {
+        return this.ridesService.getAvailableRideRequests();
+    }
+
     @Get(":id")
     @Roles(
         UserRole.RIDER,
@@ -100,12 +106,6 @@ export class RidesController {
         return this.ridesService.assignDriver(
             rideId,
         );
-    }
-
-    @Get("driver/requests")
-    @Roles(UserRole.DRIVER)
-    getRideRequests() {
-        return this.ridesService.getAvailableRideRequests();
     }
 
     @Post(":id/accept")

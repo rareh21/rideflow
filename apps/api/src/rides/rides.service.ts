@@ -3,6 +3,7 @@ import {
     NotFoundException,
     ForbiddenException,
     BadRequestException,
+    ConflictException,
 } from "@nestjs/common";
 
 import {
@@ -267,93 +268,23 @@ export class RidesService {
         userId: string,
         nextStatus: RideStatus,
     ) {
-        const ride =
-            await this.prisma.ride.findUnique({
-                where: {
-                    id: rideId,
-                },
-
-                include: {
-                    driver: {
-                select: {
-                    id: true,
-                    userId: true,
-                        },
+        const ride = await this.prisma.ride.findUnique({
+            where: {
+                id: rideId,
+            },
+            include: {
+                driver: {
+                    select: {
+                        id: true,
+                        userId: true,
+                        status: true,
                     },
                 },
-            });
+            },
+        });
 
         if (!ride) {
-            throw new NotFoundException(
-                "Ride not found",
-            );
-        }
-
-        const isRider =
-            ride.riderId === userId;
-
-        const isAssignedDriver =
-            ride.driver?.userId === userId;
-
-        if (
-            !isRider &&
-            !isAssignedDriver
-        ) {
-            throw new ForbiddenException(
-                "You do not have access to this ride",
-            );
-        }
-
-        /*
-         * Rider can cancel the ride.
-         */
-        if (isRider) {
-        if (
-                nextStatus !==
-                RideStatus.CANCELLED
-        ) {
-            throw new ForbiddenException(
-                    "Rider cannot perform this ride status transition",
-            );
-        }
-        }
-
-        /*
-         * Assigned driver controls
-         * the active ride lifecycle.
-         */
-        if (isAssignedDriver) {
-            const driverStatuses: RideStatus[] = [
-                RideStatus.DRIVER_ARRIVING,
-                RideStatus.IN_PROGRESS,
-                RideStatus.COMPLETED,
-            ];
-
-            if (
-                !driverStatuses.includes(
-                    nextStatus,
-                )
-            ) {
-                throw new ForbiddenException(
-                    "Driver cannot perform this ride status transition",
-                );
-            }
-        }
-
-        /*
-         * Matching-related transitions
-         * are controlled by the matching
-         * workflow.
-         */
-        if (
-            nextStatus ===
-            RideStatus.SEARCHING_DRIVER ||
-            nextStatus ===
-            RideStatus.DRIVER_ASSIGNED
-        ) {
-            throw new ForbiddenException(
-                "This ride status is controlled by the driver matching workflow",
-            );
+            throw new NotFoundException("Ride not found");
         }
 
         if (
@@ -363,7 +294,118 @@ export class RidesService {
             )
         ) {
             throw new BadRequestException(
-                `Cannot change ride status from ${ride.status} to ${nextStatus}`,
+                `Ride cannot transition from ${ride.status} to ${nextStatus}`,
+            );
+        }
+
+        const isRider = ride.riderId === userId;
+
+        const isAssignedDriver =
+            ride.driver?.userId === userId;
+
+        if (!isRider && !isAssignedDriver) {
+            throw new ForbiddenException(
+                "You do not have access to this ride",
+            );
+        }
+
+        /*
+         * Rider can only cancel.
+         */
+        if (isRider) {
+            if (nextStatus !== RideStatus.CANCELLED) {
+                throw new ForbiddenException(
+                    "Rider can only cancel the ride",
+                );
+            }
+        }
+
+        /*
+         * Driver controls only their assigned ride
+         * lifecycle.
+         */
+        if (isAssignedDriver) {
+            const driverStatuses: RideStatus[] = [
+                RideStatus.DRIVER_ARRIVING,
+                RideStatus.IN_PROGRESS,
+                RideStatus.COMPLETED,
+            ];
+
+            if (
+                !driverStatuses.includes(nextStatus)
+            ) {
+                throw new ForbiddenException(
+                    "Driver cannot perform this ride transition",
+                );
+            }
+        }
+
+        /*
+         * Cancellation/completion of an assigned ride
+         * must release the driver atomically.
+         */
+        if (
+            (
+                nextStatus === RideStatus.CANCELLED ||
+                nextStatus === RideStatus.COMPLETED
+            ) &&
+            ride.driverId
+        ) {
+            return this.prisma.$transaction(
+                async (tx) => {
+                    const updatedRide =
+                        await tx.ride.update({
+                            where: {
+                                id: rideId,
+                            },
+                            data: {
+                                status: nextStatus,
+                            },
+                            include: {
+                                pickupLocation: true,
+                                destinationLocation: true,
+                                rider: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        email: true,
+                                    },
+                                },
+                                driver: {
+                                    select: {
+                                        id: true,
+                                        status: true,
+                                        user: {
+                                            select: {
+                                                id: true,
+                                                name: true,
+                                            },
+                                        },
+                                        vehicle: {
+                                            select: {
+                                                make: true,
+                                                model: true,
+                                                year: true,
+                                                plateNumber: true,
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        });
+
+                    await tx.driver.updateMany({
+                        where: {
+                            id: ride.driverId!,
+                            status: "BUSY",
+                        },
+                        data: {
+                            status: "AVAILABLE",
+                        },
+                    });
+
+                    return updatedRide;
+                },
             );
         }
 
@@ -371,16 +413,12 @@ export class RidesService {
             where: {
                 id: rideId,
             },
-
             data: {
                 status: nextStatus,
             },
-
             include: {
                 pickupLocation: true,
-
                 destinationLocation: true,
-
                 rider: {
                     select: {
                         id: true,
@@ -388,19 +426,16 @@ export class RidesService {
                         email: true,
                     },
                 },
-
                 driver: {
                     select: {
                         id: true,
                         status: true,
-
                         user: {
                             select: {
                                 id: true,
                                 name: true,
                             },
                         },
-
                         vehicle: {
                             select: {
                                 make: true,
@@ -542,16 +577,12 @@ export class RidesService {
                 status: RideStatus.SEARCHING_DRIVER,
                 driverId: null,
             },
-
             orderBy: {
                 createdAt: "asc",
             },
-
             include: {
                 pickupLocation: true,
-
                 destinationLocation: true,
-
                 rider: {
                     select: {
                         id: true,
@@ -566,12 +597,11 @@ export class RidesService {
         rideId: string,
         userId: string,
     ) {
-        const driver =
-            await this.prisma.driver.findUnique({
-                where: {
-                    userId,
-                },
-            });
+        const driver = await this.prisma.driver.findUnique({
+            where: {
+                userId,
+            },
+        });
 
         if (!driver) {
             throw new NotFoundException(
@@ -585,111 +615,82 @@ export class RidesService {
             );
         }
 
-        const acceptedRide =
-            await this.prisma.$transaction(
-                async (tx) => {
-                    /*
-                     * Claim the driver first.
-                     *
-                     * updateMany makes the operation
-                     * atomic against another request
-                     * trying to claim the same driver.
-                     */
-                    const claimedDriver =
-                        await tx.driver.updateMany({
-                            where: {
-                                id: driver.id,
-                                status: "AVAILABLE",
-                            },
-
-                            data: {
-                                status: "BUSY",
-                            },
-                        });
-
-                    if (
-                        claimedDriver.count !== 1
-                    ) {
-                        throw new BadRequestException(
-                            "Driver is no longer available",
-                        );
-                    }
-
-                    /*
-                     * Claim the ride only if it is
-                     * still waiting for a driver.
-                     */
-                    const claimedRide =
-                        await tx.ride.updateMany({
-                            where: {
-                                id: rideId,
-                                status:
-                                    RideStatus.SEARCHING_DRIVER,
-                                driverId: null,
-                            },
-
-                            data: {
-                                driverId:
-                                    driver.id,
-
-                                status:
-                                    RideStatus.DRIVER_ASSIGNED,
-                            },
-                        });
-
-                    if (
-                        claimedRide.count !== 1
-                    ) {
-                        throw new BadRequestException(
-                            "Ride is no longer available",
-                        );
-                    }
-
-                    return tx.ride.findUnique({
+        const acceptedRide = await this.prisma.$transaction(
+            async (tx) => {
+                const claimedDriver =
+                    await tx.driver.updateMany({
                         where: {
-                            id: rideId,
+                            id: driver.id,
+                            status: "AVAILABLE",
                         },
-
-                        include: {
-                            pickupLocation: true,
-
-                            destinationLocation:
-                                true,
-
-                            rider: {
-                                select: {
-                                    id: true,
-                                    name: true,
-                                    email: true,
-                                },
-                            },
-
-                            driver: {
-                                select: {
-                                    id: true,
-                                    status: true,
-
-                                    user: {
-                                        select: {
-                                            id: true,
-                                            name: true,
-                                        },
-                                    },
-
-                                    vehicle: {
-                                        select: {
-                                            make: true,
-                                            model: true,
-                                            year: true,
-                                            plateNumber: true,
-                                        },
-                                    },
-                                },
-                            },
+                        data: {
+                            status: "BUSY",
                         },
                     });
-                },
-            );
+
+                if (claimedDriver.count !== 1) {
+                    throw new ConflictException(
+                        "Driver is no longer available",
+                    );
+                }
+
+                const claimedRide =
+                    await tx.ride.updateMany({
+                        where: {
+                            id: rideId,
+                            status: RideStatus.SEARCHING_DRIVER,
+                            driverId: null,
+                        },
+                        data: {
+                            driverId: driver.id,
+                            status: RideStatus.DRIVER_ASSIGNED,
+                        },
+                    });
+
+                if (claimedRide.count !== 1) {
+                    throw new ConflictException(
+                        "Ride is no longer available",
+                    );
+                }
+
+                return tx.ride.findUnique({
+                    where: {
+                        id: rideId,
+                    },
+                    include: {
+                        pickupLocation: true,
+                        destinationLocation: true,
+                        rider: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                            },
+                        },
+                        driver: {
+                            select: {
+                                id: true,
+                                status: true,
+                                user: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                    },
+                                },
+                                vehicle: {
+                                    select: {
+                                        make: true,
+                                        model: true,
+                                        year: true,
+                                        plateNumber: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                });
+            },
+        );
 
         return {
             accepted: true,

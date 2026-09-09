@@ -1,9 +1,6 @@
 import { RideStatus } from "@prisma/client";
 
-const allowedTransitions: Record<
-    RideStatus,
-    RideStatus[]
-> = {
+const transitions: Record<RideStatus, RideStatus[]> = {
     REQUESTED: [
         RideStatus.SEARCHING_DRIVER,
         RideStatus.CANCELLED,
@@ -26,7 +23,6 @@ const allowedTransitions: Record<
 
     IN_PROGRESS: [
         RideStatus.COMPLETED,
-        RideStatus.CANCELLED,
     ],
 
     COMPLETED: [],
@@ -35,8 +31,8 @@ const allowedTransitions: Record<
 };
 
 export function canTransitionRideStatus(
-    current: RideStatus,
-    next: RideStatus,
-) {
-    return allowedTransitions[current].includes(next);
+    currentStatus: RideStatus,
+    nextStatus: RideStatus,
+): boolean {
+    return transitions[currentStatus]?.includes(nextStatus) ?? false;
 }
