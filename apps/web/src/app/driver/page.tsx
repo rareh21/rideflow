@@ -7,6 +7,9 @@ import {
     UserRound,
     ChevronRight,
     Radio,
+    XCircle,
+    Loader2,
+    ArrowRight,
 } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -22,7 +25,8 @@ import type {
     DriverStatus,
 } from "@/lib/drivers";
 
-import { getDriverRideRequests } from "@/lib/rides";
+import { getDriverRideRequests, getDriverRides, updateRideStatus, type Ride } from "@/lib/rides";
+import { determineVehicleType } from "@/lib/vehicles";
 import { Button } from "@/components/ui/button";
 
 export default function DriverDashboardPage() {
@@ -30,9 +34,15 @@ export default function DriverDashboardPage() {
 
     const [driver, setDriver] = useState<DriverProfile | null>(null);
     const [requestCount, setRequestCount] = useState<number>(0);
+    const [activeRide, setActiveRide] = useState<Ride | null>(null);
     const [loading, setLoading] = useState(true);
     const [updatingStatus, setUpdatingStatus] = useState(false);
+    const [activeUpdating, setActiveUpdating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const vehicleType = driver?.vehicle
+        ? determineVehicleType(driver.vehicle.make, driver.vehicle.model)
+        : null;
 
     const loadDriver = useCallback(async () => {
         try {
@@ -42,15 +52,34 @@ export default function DriverDashboardPage() {
             const data = await getMyDriver();
             setDriver(data);
 
-            if (data.status === "AVAILABLE") {
+            const vt = data.vehicle ? determineVehicleType(data.vehicle.make, data.vehicle.model) : null;
+
+            if (data.status === "AVAILABLE" && vt) {
                 try {
                     const reqs = await getDriverRideRequests();
-                    setRequestCount(reqs.length);
+                    setRequestCount(reqs.filter((r) => r.rideType === vt).length);
                 } catch {
                     setRequestCount(0);
                 }
             } else {
                 setRequestCount(0);
+            }
+
+            if (data.status === "BUSY") {
+                try {
+                    const rides = await getDriverRides();
+                    const active = rides.find(
+                        (r) =>
+                            r.status === "DRIVER_ASSIGNED" ||
+                            r.status === "DRIVER_ARRIVING" ||
+                            r.status === "IN_PROGRESS",
+                    );
+                    setActiveRide(active ?? null);
+                } catch {
+                    setActiveRide(null);
+                }
+            } else {
+                setActiveRide(null);
             }
         } catch (err) {
             setError(
@@ -97,6 +126,21 @@ export default function DriverDashboardPage() {
             );
         } finally {
             setUpdatingStatus(false);
+        }
+    }
+
+    async function handleCancelActiveRide() {
+        if (!activeRide || activeUpdating) return;
+        try {
+            setActiveUpdating(true);
+            setError(null);
+            await updateRideStatus(activeRide.id, "CANCELLED");
+            setActiveRide(null);
+            void loadDriver();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Unable to cancel ride.");
+        } finally {
+            setActiveUpdating(false);
         }
     }
 
@@ -275,6 +319,48 @@ export default function DriverDashboardPage() {
                         </div>
                     </div>
                 </section>
+
+                {/* Active Ride Card (Requirement 2: Cancel Ride on Card directly) */}
+                {driver.status === "BUSY" && activeRide && (
+                    <section className="mt-6 rounded-3xl border-2 border-[var(--rf-green)] bg-[var(--rf-surface)] p-6 shadow-md sm:p-8">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-wider text-[var(--rf-green-dark)]">Active Trip</p>
+                                <h3 className="mt-1 text-xl font-bold text-[var(--rf-midnight)]">{activeRide.rider?.name ?? "Rider"}</h3>
+                            </div>
+                            <span className="rounded-full bg-[var(--rf-green)]/10 px-3 py-1 text-xs font-bold text-[var(--rf-green-dark)]">
+                                {activeRide.status.replace("_", " ")}
+                            </span>
+                        </div>
+
+                        <div className="mt-4 space-y-2 rounded-2xl bg-[var(--rf-surface-muted)] p-4 text-sm">
+                            <p className="font-semibold text-[var(--rf-midnight)]">Pickup: {activeRide.pickupLocation.label}</p>
+                            <p className="font-semibold text-[var(--rf-midnight)]">Dropoff: {activeRide.destinationLocation.label}</p>
+                            <p className="text-xs text-[var(--rf-muted)]">Fare: ₹{activeRide.estimatedFare} · Distance: {activeRide.estimatedDistanceKm} km</p>
+                        </div>
+
+                        <div className="mt-5 flex items-center justify-between gap-3">
+                            <Link
+                                href="/driver/rides"
+                                className="flex items-center gap-2 rounded-2xl bg-[var(--rf-green)] px-5 py-3 text-xs font-bold text-[var(--rf-midnight)]"
+                            >
+                                Manage Ride <ArrowRight size={14} />
+                            </Link>
+
+                            {(activeRide.status === "DRIVER_ASSIGNED" || activeRide.status === "DRIVER_ARRIVING") && (
+                                <button
+                                    type="button"
+                                    disabled={activeUpdating}
+                                    onClick={() => void handleCancelActiveRide()}
+                                    className="flex items-center gap-1.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                                >
+                                    {activeUpdating ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+                                    Cancel Ride
+                                </button>
+                            )}
+                        </div>
+                    </section>
+                )}
 
                 {/* Dashboard cards */}
                 <section className="mt-6 grid gap-4 md:grid-cols-4 sm:grid-cols-2">

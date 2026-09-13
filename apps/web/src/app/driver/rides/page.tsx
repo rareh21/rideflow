@@ -8,6 +8,7 @@ import {
     Clock3,
     Loader2,
     MapPin,
+    PlayCircle,
     Radio,
     ShieldCheck,
     XCircle,
@@ -26,10 +27,12 @@ import {
     acceptRide,
     getDriverRideRequests,
     getDriverRides,
+    updateRideStatus,
     type DriverRideRequest,
     type Ride,
     type RideStatus,
 } from "@/lib/rides";
+import { determineVehicleType } from "@/lib/vehicles";
 import { useRideRealtime } from "@/hooks/use-ride-realtime";
 import { useAuthorization } from "@/components/auth/authorization-context";
 
@@ -78,6 +81,24 @@ const STATUS_CONFIG: Record<
     },
 };
 
+const NEXT_STATUS_ACTIONS: Partial<Record<RideStatus, { next: RideStatus; label: string; icon: typeof Car }>> = {
+    DRIVER_ASSIGNED: {
+        next: "DRIVER_ARRIVING",
+        label: "I've Arrived",
+        icon: Car,
+    },
+    DRIVER_ARRIVING: {
+        next: "IN_PROGRESS",
+        label: "Start Ride",
+        icon: PlayCircle,
+    },
+    IN_PROGRESS: {
+        next: "COMPLETED",
+        label: "Complete Ride",
+        icon: CheckCircle2,
+    },
+};
+
 export default function DriverRidesPage() {
     return (
         <Can permission={Permissions.DRIVER_RIDE_VIEW}>
@@ -98,9 +119,14 @@ function DriverRidesContent() {
 
     const [acceptingRideId, setAcceptingRideId] = useState<string | null>(null);
     const [updatingStatus, setUpdatingStatus] = useState(false);
+    const [activeRideUpdating, setActiveRideUpdating] = useState(false);
 
     const [pageError, setPageError] = useState<string | null>(null);
     const [requestFeedback, setRequestFeedback] = useState<string | null>(null);
+
+    const driverVehicleType = driver?.vehicle
+        ? determineVehicleType(driver.vehicle.make, driver.vehicle.model)
+        : null;
 
     const loadDriver = useCallback(async () => {
         try {
@@ -122,12 +148,16 @@ function DriverRidesContent() {
     const loadRequests = useCallback(async () => {
         try {
             const data = await getDriverRideRequests();
-            setRequests(data);
+            // Client-side vehicle matching filter as an extra guarantee
+            if (driverVehicleType) {
+                setRequests(data.filter((r) => r.rideType === driverVehicleType));
+            } else {
+                setRequests(data);
+            }
         } catch (err) {
-            // Non-fatal feed loading error
             console.error("Failed to load requests", err);
         }
-    }, []);
+    }, [driverVehicleType]);
 
     const loadAssignedRides = useCallback(async () => {
         try {
@@ -149,28 +179,31 @@ function DriverRidesContent() {
     }, [loadDriver, loadAssignedRides]);
 
     useEffect(() => {
-        if (driver?.status === "AVAILABLE") {
+        if (driver?.status === "AVAILABLE" && driver?.vehicle) {
             void loadRequests();
         } else {
             setRequests([]);
         }
-    }, [driver?.status, loadRequests]);
+    }, [driver?.status, driver?.vehicle, loadRequests]);
 
     // Realtime subscriptions & Reconnect reconciliation
     useRideRealtime({
         onRequestCreated: (event) => {
-            if (driver?.status === "AVAILABLE") {
-                setRequests((prev) => {
-                    if (prev.some((r) => r.id === event.ride.id)) return prev;
-                    return [event.ride, ...prev];
-                });
+            if (driver?.status === "AVAILABLE" && driverVehicleType) {
+                // Requirement 1: Only add requests matching the driver's vehicle type
+                if (event.ride.rideType === driverVehicleType) {
+                    setRequests((prev) => {
+                        if (prev.some((r) => r.id === event.ride.id)) return prev;
+                        return [event.ride, ...prev];
+                    });
+                }
             }
         },
         onRequestRemoved: (event) => {
             setRequests((prev) => prev.filter((r) => r.id !== event.rideId));
         },
         onRequestsChanged: () => {
-            if (driver?.status === "AVAILABLE") {
+            if (driver?.status === "AVAILABLE" && driver?.vehicle) {
                 void loadRequests();
             }
         },
@@ -179,10 +212,9 @@ function DriverRidesContent() {
             void loadDriver();
         },
         onConnected: () => {
-            // Reconnect reconciliation (HTTP source of truth)
             void loadDriver();
             void loadAssignedRides();
-            if (driver?.status === "AVAILABLE") {
+            if (driver?.status === "AVAILABLE" && driver?.vehicle) {
                 void loadRequests();
             }
         },
@@ -196,7 +228,7 @@ function DriverRidesContent() {
             setPageError(null);
             const updated = await updateDriverStatus(status);
             setDriver(updated);
-            if (updated.status === "AVAILABLE") {
+            if (updated.status === "AVAILABLE" && updated.vehicle) {
                 void loadRequests();
             } else {
                 setRequests([]);
@@ -220,19 +252,16 @@ function DriverRidesContent() {
             const response = await acceptRide(rideId);
 
             if (response.accepted && response.ride) {
-                // Remove from available requests list immediately
                 setRequests((prev) => prev.filter((r) => r.id !== rideId));
-                // Update driver status locally to BUSY
                 if (driver) {
                     setDriver({ ...driver, status: "BUSY" });
                 }
-                // Prepend to assigned rides
                 setAssignedRides((prev) => [response.ride, ...prev.filter((r) => r.id !== rideId)]);
+                setRequestFeedback("Ride accepted! You are now assigned to this trip.");
             }
         } catch (err) {
             const message = err instanceof Error ? err.message : "Unable to accept ride.";
 
-            // Concurrent acceptance or no longer available UX
             if (
                 message.includes("no longer available") ||
                 message.includes("handling another ride") ||
@@ -246,6 +275,41 @@ function DriverRidesContent() {
         } finally {
             setAcceptingRideId(null);
         }
+    }
+
+    // Direct Inline Active Ride Status Updates (Requirement 2: Cancel Directly on Card)
+    async function handleAdvanceActiveRide(rideId: string, nextStatus: RideStatus) {
+        if (activeRideUpdating) return;
+        try {
+            setActiveRideUpdating(true);
+            setRequestFeedback(null);
+
+            const updatedRide = await updateRideStatus(rideId, nextStatus);
+
+            setAssignedRides((prev) =>
+                prev.map((r) => (r.id === rideId ? updatedRide : r)),
+            );
+
+            if (nextStatus === "COMPLETED" || nextStatus === "CANCELLED") {
+                // Refresh driver status to AVAILABLE
+                void loadDriver();
+                setRequestFeedback(
+                    nextStatus === "COMPLETED"
+                        ? "Trip completed! Your availability has been restored."
+                        : "Ride cancelled. Your availability has been restored.",
+                );
+            }
+        } catch (err) {
+            setRequestFeedback(
+                err instanceof Error ? err.message : "Unable to update ride status.",
+            );
+        } finally {
+            setActiveRideUpdating(false);
+        }
+    }
+
+    async function handleCancelActiveRide(rideId: string) {
+        await handleAdvanceActiveRide(rideId, "CANCELLED");
     }
 
     // Active current ride (assigned/arriving/in_progress)
@@ -275,13 +339,23 @@ function DriverRidesContent() {
         <main className="min-h-full bg-[var(--rf-surface-muted)]">
             <div className="mx-auto max-w-4xl px-4 py-8 pb-28 sm:px-6 lg:py-10 lg:pb-10">
                 <header>
-                    <p className="text-xs font-bold uppercase tracking-wider text-[var(--rf-green-dark)]">
-                        Driver Console
-                    </p>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-xs font-bold uppercase tracking-wider text-[var(--rf-green-dark)]">
+                                Driver Console
+                            </p>
 
-                    <h1 className="mt-2 text-2xl font-bold text-[var(--rf-midnight)] sm:text-3xl">
-                        Ride Requests & Trips
-                    </h1>
+                            <h1 className="mt-2 text-2xl font-bold text-[var(--rf-midnight)] sm:text-3xl">
+                                Ride Requests & Trips
+                            </h1>
+                        </div>
+
+                        {driverVehicleType && (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--rf-green)]/10 px-3.5 py-1.5 text-xs font-bold text-[var(--rf-green-dark)]">
+                                Vehicle Tier: {driverVehicleType}
+                            </span>
+                        )}
+                    </div>
                 </header>
 
                 {pageError && (
@@ -303,6 +377,30 @@ function DriverRidesContent() {
                     </div>
                 )}
 
+                {/* ── MISSING VEHICLE PROMPT ───────────────────────────── */}
+                {!driver?.vehicle && (
+                    <section className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-900 shadow-sm sm:p-8">
+                        <div className="flex items-start gap-4">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-800">
+                                <Car size={24} />
+                            </div>
+                            <div className="flex-1">
+                                <h2 className="text-lg font-bold">Vehicle registration required</h2>
+                                <p className="mt-1 text-sm text-amber-800">
+                                    You need to add your vehicle details to start seeing ride requests that match your vehicle type (GO, PLUS, XL).
+                                </p>
+                                <Link
+                                    href="/driver/vehicle"
+                                    className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-amber-800 px-5 py-2.5 text-xs font-bold text-white transition hover:bg-amber-900"
+                                >
+                                    Add Vehicle Details
+                                    <ArrowRight size={14} />
+                                </Link>
+                            </div>
+                        </div>
+                    </section>
+                )}
+
                 {/* ── DRIVER STATUS-BASED VIEWS ───────────────────────── */}
 
                 {/* STATE 1: OFFLINE */}
@@ -317,13 +415,13 @@ function DriverRidesContent() {
                         </h2>
 
                         <p className="mt-2 text-sm text-[var(--rf-muted)]">
-                            Go online to receive nearby ride requests.
+                            Go online to receive ride requests matching your vehicle tier ({driverVehicleType ?? "Standard"}).
                         </p>
 
                         <div className="mt-6 flex justify-center">
                             <button
                                 type="button"
-                                disabled={updatingStatus}
+                                disabled={updatingStatus || !driver?.vehicle}
                                 onClick={() => void handleStatusChange("AVAILABLE")}
                                 className="flex min-h-12 items-center gap-2 rounded-2xl bg-[var(--rf-green)] px-6 text-sm font-bold text-[var(--rf-midnight)] transition hover:bg-[var(--rf-green-dark)] disabled:opacity-60"
                             >
@@ -340,36 +438,37 @@ function DriverRidesContent() {
                     </section>
                 )}
 
-                {/* STATE 2: BUSY (Handling a Ride) */}
+                {/* STATE 2: BUSY (Active Ride Card with Direct Actions & Direct Cancel Button) */}
                 {driver?.status === "BUSY" && (
                     <section className="mt-6 space-y-6">
                         <div className="rounded-3xl border border-[var(--rf-border)] bg-[var(--rf-midnight)] p-6 text-white shadow-sm sm:p-8">
                             <div className="flex items-center gap-3">
-                                <span className="flex h-3 w-3 rounded-full bg-[var(--rf-green)]" />
-                                <h2 className="text-xl font-bold">You're currently on a ride</h2>
+                                <span className="flex h-3 w-3 rounded-full bg-[var(--rf-green)] animate-pulse" />
+                                <h2 className="text-xl font-bold">Active Trip</h2>
                             </div>
 
                             <p className="mt-2 text-sm text-white/70">
-                                You cannot accept additional requests while handling an active ride.
+                                Manage your ride status directly below or cancel if needed.
                             </p>
                         </div>
 
                         {activeRide && (
-                            <div className="rounded-3xl border border-[var(--rf-border)] bg-[var(--rf-surface)] p-6 shadow-sm">
+                            <div className="rounded-3xl border-2 border-[var(--rf-green)] bg-[var(--rf-surface)] p-6 shadow-md sm:p-8">
                                 <div className="flex items-center justify-between gap-4">
                                     <div>
                                         <p className="text-xs font-semibold text-[var(--rf-muted)]">
-                                            Current Ride
+                                            Rider
                                         </p>
-                                        <h3 className="mt-1 text-lg font-bold text-[var(--rf-midnight)]">
+                                        <h3 className="mt-1 text-xl font-bold text-[var(--rf-midnight)]">
                                             {activeRide.rider?.name ?? "Rider"}
                                         </h3>
                                     </div>
                                     <StatusBadge status={activeRide.status} />
                                 </div>
 
-                                <div className="mt-5 space-y-3">
+                                <div className="mt-5 space-y-3 rounded-2xl bg-[var(--rf-surface-muted)] p-4">
                                     <LocationRow label={activeRide.pickupLocation.label} />
+                                    <div className="ml-4 h-3 border-l border-dashed border-[var(--rf-border)]" />
                                     <LocationRow label={activeRide.destinationLocation.label} />
                                 </div>
 
@@ -388,22 +487,60 @@ function DriverRidesContent() {
                                     </div>
                                 </div>
 
-                                <div className="mt-6 flex justify-end">
-                                    <Link
-                                        href={`/driver/rides/${activeRide.id}`}
-                                        className="flex items-center gap-2 rounded-2xl bg-[var(--rf-green)] px-5 py-3 text-sm font-bold text-[var(--rf-midnight)] transition hover:bg-[var(--rf-green-dark)]"
-                                    >
-                                        Manage Active Ride
-                                        <ArrowRight size={16} />
-                                    </Link>
+                                {/* Requirement 2: Direct Actions & Cancel Ride directly on the card */}
+                                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t border-[var(--rf-border)] pt-5">
+                                    {/* Primary Next Action */}
+                                    {NEXT_STATUS_ACTIONS[activeRide.status] && (
+                                        <button
+                                            type="button"
+                                            disabled={activeRideUpdating}
+                                            onClick={() =>
+                                                void handleAdvanceActiveRide(
+                                                    activeRide.id,
+                                                    NEXT_STATUS_ACTIONS[activeRide.status]!.next,
+                                                )
+                                            }
+                                            className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--rf-green)] px-5 text-sm font-bold text-[var(--rf-midnight)] transition hover:bg-[var(--rf-green-dark)] disabled:opacity-60"
+                                        >
+                                            {activeRideUpdating ? (
+                                                <>
+                                                    <Loader2 size={16} className="animate-spin" />
+                                                    Updating trip...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    {NEXT_STATUS_ACTIONS[activeRide.status]!.label}
+                                                    <ArrowRight size={16} />
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
+
+                                    {/* Cancel Ride directly on card */}
+                                    {(activeRide.status === "DRIVER_ASSIGNED" ||
+                                        activeRide.status === "DRIVER_ARRIVING") && (
+                                        <button
+                                            type="button"
+                                            disabled={activeRideUpdating}
+                                            onClick={() => void handleCancelActiveRide(activeRide.id)}
+                                            className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-5 text-sm font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                                        >
+                                            {activeRideUpdating ? (
+                                                <Loader2 size={16} className="animate-spin" />
+                                            ) : (
+                                                <XCircle size={16} />
+                                            )}
+                                            Cancel Ride
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         )}
                     </section>
                 )}
 
-                {/* STATE 3: AVAILABLE (Showing Requests Feed) */}
-                {driver?.status === "AVAILABLE" && (
+                {/* STATE 3: AVAILABLE (Showing Requests Feed filtered by vehicle type) */}
+                {driver?.status === "AVAILABLE" && driver?.vehicle && (
                     <section className="mt-6 space-y-6">
                         <div className="flex items-center justify-between gap-4">
                             <div>
@@ -414,7 +551,7 @@ function DriverRidesContent() {
                                     </h2>
                                 </div>
                                 <p className="mt-1 text-sm text-[var(--rf-muted)]">
-                                    Accept a nearby ride when you're ready to drive.
+                                    Showing requests for <span className="font-semibold text-[var(--rf-midnight)]">{driverVehicleType}</span> vehicle tier.
                                 </p>
                             </div>
 
@@ -423,7 +560,7 @@ function DriverRidesContent() {
                                 onClick={() => void loadRequests()}
                                 className="text-xs font-semibold text-[var(--rf-green-dark)] transition hover:underline"
                             >
-                                Check again
+                                Refresh feed
                             </button>
                         </div>
 
@@ -434,11 +571,11 @@ function DriverRidesContent() {
                                 </div>
 
                                 <h3 className="mt-4 text-lg font-bold text-[var(--rf-midnight)]">
-                                    No ride requests right now
+                                    No {driverVehicleType} ride requests right now
                                 </h3>
 
                                 <p className="mt-2 text-sm text-[var(--rf-muted)]">
-                                    New ride requests will appear here when you're available.
+                                    New ride requests for {driverVehicleType} vehicles will appear here in real-time.
                                 </p>
 
                                 <button
@@ -446,7 +583,7 @@ function DriverRidesContent() {
                                     onClick={() => void loadRequests()}
                                     className="mt-5 inline-flex items-center gap-1.5 text-xs font-bold text-[var(--rf-green-dark)]"
                                 >
-                                    Check again
+                                    Refresh feed
                                 </button>
                             </div>
                         ) : (
@@ -513,7 +650,7 @@ function DriverRidesContent() {
                                     <div className="mt-4 flex items-center justify-between border-t border-[var(--rf-border)] pt-3 text-xs text-[var(--rf-muted)]">
                                         <span>₹{ride.estimatedFare} · {ride.paymentMethod ?? "UPI"}</span>
                                         <span className="inline-flex items-center gap-1 font-semibold text-[var(--rf-green-dark)]">
-                                            View ride
+                                            View details
                                             <ArrowRight size={14} />
                                         </span>
                                     </div>

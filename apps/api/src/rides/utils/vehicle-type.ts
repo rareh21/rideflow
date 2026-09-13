@@ -1,53 +1,11 @@
-import { api } from "./api";
-import type { RideType } from "./rides";
-
-export type Vehicle = {
-    id: string;
-    driverId: string;
-    make: string;
-    model: string;
-    year: number;
-    plateNumber: string;
-};
-
-export type CreateVehiclePayload = {
-    make: string;
-    model: string;
-    year: number;
-    plateNumber: string;
-};
-
-export type UpdateVehiclePayload =
-    Partial<CreateVehiclePayload>;
-
-export async function createVehicle(
-    payload: CreateVehiclePayload,
-) {
-    return api<Vehicle>("/vehicles", {
-        method: "POST",
-        body: JSON.stringify(payload),
-    });
-}
-
-export async function getMyVehicle() {
-    return api<Vehicle>("/vehicles/me");
-}
-
-export async function updateMyVehicle(
-    payload: UpdateVehiclePayload,
-) {
-    return api<Vehicle>("/vehicles/me", {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-    });
-}
+import { RideType } from "@prisma/client";
 
 /**
  * Determines the RideType category (GO, PLUS, XL) for a driver's vehicle
  * based on its make and model.
  */
 export function determineVehicleType(make?: string | null, model?: string | null): RideType {
-    if (!make && !model) return "GO";
+    if (!make && !model) return RideType.GO;
 
     const combined = `${make ?? ""} ${model ?? ""}`.toUpperCase();
 
@@ -64,7 +22,7 @@ export function determineVehicleType(make?: string | null, model?: string | null
         combined.includes("MARAZZO") ||
         combined.includes("TRIBER")
     ) {
-        return "XL";
+        return RideType.XL;
     }
 
     if (
@@ -82,8 +40,8 @@ export function determineVehicleType(make?: string | null, model?: string | null
         combined.includes("CAMRY") ||
         combined.includes("OCTAVIA")
     ) {
-        return "PLUS";
+        return RideType.PLUS;
     }
 
-    return "GO";
+    return RideType.GO;
 }

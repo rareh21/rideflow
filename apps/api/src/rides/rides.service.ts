@@ -8,6 +8,7 @@ import {
 
 import {
     RideStatus,
+    RideType,
 } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
@@ -19,6 +20,7 @@ import { RideTimeoutService } from "./ride-timeout.service";
 import { canTransitionRideStatus } from "./ride-status";
 import { RoutingService } from "./routing/routing.service";
 import { calculateFare } from "./utils/fare-calculator";
+import { determineVehicleType } from "./utils/vehicle-type";
 
 @Injectable()
 export class RidesService {
@@ -784,15 +786,32 @@ export class RidesService {
     }
 
     async getAvailableRideRequests(userId?: string) {
+        let vehicleType: RideType | undefined;
+
         if (userId) {
             const driver = await this.prisma.driver.findUnique({
                 where: { userId },
-                select: { status: true },
+                select: {
+                    status: true,
+                    vehicle: {
+                        select: {
+                            make: true,
+                            model: true,
+                        },
+                    },
+                },
             });
 
             if (!driver || driver.status !== "AVAILABLE") {
                 return [];
             }
+
+            if (!driver.vehicle) {
+                // Driver has no registered vehicle — cannot accept ride requests
+                return [];
+            }
+
+            vehicleType = determineVehicleType(driver.vehicle.make, driver.vehicle.model);
         }
 
         const expiryMinutes = Number(process.env.RIDE_REQUEST_EXPIRY_MINUTES) || 10;
@@ -802,6 +821,7 @@ export class RidesService {
             where: {
                 status: RideStatus.SEARCHING_DRIVER,
                 driverId: null,
+                ...(vehicleType ? { rideType: vehicleType } : {}),
                 createdAt: {
                     gte: cutoff,
                 },
@@ -830,6 +850,9 @@ export class RidesService {
             where: {
                 userId,
             },
+            include: {
+                vehicle: true,
+            },
         });
 
         if (!driver) {
@@ -841,6 +864,28 @@ export class RidesService {
         if (driver.status !== "AVAILABLE") {
             throw new BadRequestException(
                 "Driver must be available to accept a ride",
+            );
+        }
+
+        if (!driver.vehicle) {
+            throw new BadRequestException(
+                "You must register a vehicle before accepting rides",
+            );
+        }
+
+        const driverVehicleType = determineVehicleType(
+            driver.vehicle.make,
+            driver.vehicle.model,
+        );
+
+        const targetRide = await this.prisma.ride.findUnique({
+            where: { id: rideId },
+            select: { rideType: true },
+        });
+
+        if (targetRide && targetRide.rideType !== driverVehicleType) {
+            throw new BadRequestException(
+                `Your vehicle type (${driverVehicleType}) does not match this ride request (${targetRide.rideType})`,
             );
         }
 
