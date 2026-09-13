@@ -159,6 +159,7 @@ export class RidesService {
         });
 
         this.emitRideUpdated(ride);
+        this.ridesGateway.emitRideRequestCreated(ride);
 
         // Start the no-driver-found timer. If no driver accepts within the
         // configured window the ride is auto-cancelled server-side.
@@ -534,6 +535,9 @@ export class RidesService {
          * other transitions away from SEARCHING_DRIVER.
          */
         this.rideTimeoutService.cancelTimer(rideId);
+        if (ride.status === RideStatus.SEARCHING_DRIVER) {
+            this.ridesGateway.emitRideRequestRemoved(rideId);
+        }
 
         /*
          * Cancellation/completion of an assigned ride
@@ -779,11 +783,28 @@ export class RidesService {
         };
     }
 
-    async getAvailableRideRequests() {
+    async getAvailableRideRequests(userId?: string) {
+        if (userId) {
+            const driver = await this.prisma.driver.findUnique({
+                where: { userId },
+                select: { status: true },
+            });
+
+            if (!driver || driver.status !== "AVAILABLE") {
+                return [];
+            }
+        }
+
+        const expiryMinutes = Number(process.env.RIDE_REQUEST_EXPIRY_MINUTES) || 10;
+        const cutoff = new Date(Date.now() - expiryMinutes * 60 * 1000);
+
         return this.prisma.ride.findMany({
             where: {
                 status: RideStatus.SEARCHING_DRIVER,
                 driverId: null,
+                createdAt: {
+                    gte: cutoff,
+                },
             },
             orderBy: {
                 createdAt: "asc",
@@ -838,7 +859,7 @@ export class RidesService {
 
                 if (claimedDriver.count !== 1) {
                     throw new ConflictException(
-                        "Driver is no longer available",
+                        "You are currently handling another ride",
                     );
                 }
 
@@ -857,7 +878,7 @@ export class RidesService {
 
                 if (claimedRide.count !== 1) {
                     throw new ConflictException(
-                        "Ride is no longer available",
+                        "This ride is no longer available",
                     );
                 }
 
@@ -905,6 +926,7 @@ export class RidesService {
             this.rideTimeoutService.cancelTimer(rideId);
 
             this.emitRideUpdated(acceptedRide);
+            this.ridesGateway.emitRideRequestRemoved(rideId);
         }
 
         return {

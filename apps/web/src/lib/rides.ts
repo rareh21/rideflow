@@ -190,10 +190,16 @@ export type RideRequest = Ride & {
     };
 };
 
+export type DriverRideRequest = RideRequest;
+
 export async function getRideRequests() {
     return api<RideRequest[]>(
         "/rides/driver/requests",
     );
+}
+
+export async function getDriverRideRequests() {
+    return getRideRequests();
 }
 
 export async function acceptRide(

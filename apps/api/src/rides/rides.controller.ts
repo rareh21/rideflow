@@ -97,8 +97,12 @@ export class RidesController {
 
     @Get("driver/requests")
     @Roles(UserRole.DRIVER)
-    getRideRequests() {
-        return this.ridesService.getAvailableRideRequests();
+    getRideRequests(
+        @CurrentUser() user: AuthUser,
+    ) {
+        return this.ridesService.getAvailableRideRequests(
+            user.userId,
+        );
     }
 
     @Get(":id")

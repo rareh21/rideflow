@@ -67,7 +67,6 @@ export class RidesGateway
 
             /*
              * Every authenticated user gets a private room.
-             *
              * The client does NOT choose this userId.
              * It comes from the verified JWT.
              */
@@ -75,6 +74,7 @@ export class RidesGateway
 
             if (payload.role === "DRIVER") {
                 client.join("drivers");
+                client.join("drivers:available");
             }
         } catch {
             client.disconnect(true);
@@ -131,5 +131,18 @@ export class RidesGateway
             "ride.requests.changed",
             { rideId: payload.rideId },
         );
+    }
+
+    emitRideRequestCreated(ride: unknown) {
+        const rideId = (ride as { id?: string })?.id;
+        this.server.to("drivers").emit("ride.request.created", { ride });
+        if (rideId) {
+            this.server.to("drivers").emit("ride.requests.changed", { rideId });
+        }
+    }
+
+    emitRideRequestRemoved(rideId: string) {
+        this.server.to("drivers").emit("ride.request.removed", { rideId });
+        this.server.to("drivers").emit("ride.requests.changed", { rideId });
     }
 }

@@ -8,8 +8,9 @@ import {
     ChevronRight,
     Radio,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import {
     getMyDriver,
@@ -21,59 +22,52 @@ import type {
     DriverStatus,
 } from "@/lib/drivers";
 
+import { getDriverRideRequests } from "@/lib/rides";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
 
 export default function DriverDashboardPage() {
     const router = useRouter();
 
-    const [driver, setDriver] =
-        useState<DriverProfile | null>(null);
-
+    const [driver, setDriver] = useState<DriverProfile | null>(null);
+    const [requestCount, setRequestCount] = useState<number>(0);
     const [loading, setLoading] = useState(true);
-    const [updatingStatus, setUpdatingStatus] =
-        useState(false);
-    const [error, setError] =
-        useState<string | null>(null);
+    const [updatingStatus, setUpdatingStatus] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        let active = true;
+    const loadDriver = useCallback(async () => {
+        try {
+            setLoading(true);
+            setError(null);
 
-        async function loadDriver() {
-            try {
-                setLoading(true);
-                setError(null);
+            const data = await getMyDriver();
+            setDriver(data);
 
-                const data = await getMyDriver();
-
-                if (active) {
-                    setDriver(data);
+            if (data.status === "AVAILABLE") {
+                try {
+                    const reqs = await getDriverRideRequests();
+                    setRequestCount(reqs.length);
+                } catch {
+                    setRequestCount(0);
                 }
-            } catch (err) {
-                if (active) {
-                    setError(
-                        err instanceof Error
-                            ? err.message
-                            : "Unable to load driver profile",
-                    );
-                }
-            } finally {
-                if (active) {
-                    setLoading(false);
-                }
+            } else {
+                setRequestCount(0);
             }
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Unable to load driver profile",
+            );
+        } finally {
+            setLoading(false);
         }
-
-        loadDriver();
-
-        return () => {
-            active = false;
-        };
     }, []);
 
-    async function handleStatusChange(
-        status: DriverStatus,
-    ) {
+    useEffect(() => {
+        void loadDriver();
+    }, [loadDriver]);
+
+    async function handleStatusChange(status: DriverStatus) {
         if (!driver || updatingStatus) {
             return;
         }
@@ -82,10 +76,19 @@ export default function DriverDashboardPage() {
             setUpdatingStatus(true);
             setError(null);
 
-            const updated =
-                await updateDriverStatus(status);
-
+            const updated = await updateDriverStatus(status);
             setDriver(updated);
+
+            if (updated.status === "AVAILABLE") {
+                try {
+                    const reqs = await getDriverRideRequests();
+                    setRequestCount(reqs.length);
+                } catch {
+                    setRequestCount(0);
+                }
+            } else {
+                setRequestCount(0);
+            }
         } catch (err) {
             setError(
                 err instanceof Error
@@ -134,25 +137,20 @@ export default function DriverDashboardPage() {
                         </h1>
 
                         <p className="mt-2 text-sm leading-6 text-[var(--rf-muted)]">
-                            {error ??
-                                "Driver profile not found."}
+                            {error ?? "Driver profile not found."}
                         </p>
 
                         <div className="mt-6 flex flex-wrap gap-3">
                             <Button
                                 variant="secondary"
-                                onClick={() =>
-                                    router.push("/profile")
-                                }
+                                onClick={() => router.push("/profile")}
                             >
                                 Back to Profile
                             </Button>
 
                             <Button
                                 variant="primary"
-                                onClick={() =>
-                                    window.location.reload()
-                                }
+                                onClick={() => void loadDriver()}
                             >
                                 Try Again
                             </Button>
@@ -163,8 +161,7 @@ export default function DriverDashboardPage() {
         );
     }
 
-    const isOnline =
-        driver.status === "AVAILABLE";
+    const isOnline = driver.status === "AVAILABLE";
 
     const statusLabel =
         driver.status === "AVAILABLE"
@@ -226,10 +223,11 @@ export default function DriverDashboardPage() {
 
                                     <div className="mt-1 flex items-center gap-2">
                                         <span
-                                            className={`h-2.5 w-2.5 rounded-full ${isOnline
-                                                ? "bg-[var(--rf-green)]"
-                                                : "bg-white/40"
-                                                }`}
+                                            className={`h-2.5 w-2.5 rounded-full ${
+                                                isOnline
+                                                    ? "bg-[var(--rf-green)]"
+                                                    : "bg-white/40"
+                                            }`}
                                         />
 
                                         <h2 className="text-xl font-semibold text-white">
@@ -249,11 +247,7 @@ export default function DriverDashboardPage() {
                                 <Button
                                     variant="primary"
                                     disabled={updatingStatus}
-                                    onClick={() =>
-                                        handleStatusChange(
-                                            "AVAILABLE",
-                                        )
-                                    }
+                                    onClick={() => handleStatusChange("AVAILABLE")}
                                 >
                                     {updatingStatus
                                         ? "Going online..."
@@ -265,11 +259,7 @@ export default function DriverDashboardPage() {
                                 <Button
                                     variant="secondary"
                                     disabled={updatingStatus}
-                                    onClick={() =>
-                                        handleStatusChange(
-                                            "OFFLINE",
-                                        )
-                                    }
+                                    onClick={() => handleStatusChange("OFFLINE")}
                                 >
                                     {updatingStatus
                                         ? "Going offline..."
@@ -287,12 +277,22 @@ export default function DriverDashboardPage() {
                 </section>
 
                 {/* Dashboard cards */}
-                <section className="mt-6 grid gap-4 md:grid-cols-3">
+                <section className="mt-6 grid gap-4 md:grid-cols-4 sm:grid-cols-2">
 
                     <DashboardCard
-                        icon={
-                            <CircleDollarSign size={21} />
+                        icon={<Radio size={21} />}
+                        title="Available Ride Requests"
+                        value={
+                            driver.status === "AVAILABLE"
+                                ? `${requestCount} ${requestCount === 1 ? "ride" : "rides"} available`
+                                : "Unavailable"
                         }
+                        description="View and accept nearby ride requests."
+                        href="/driver/rides"
+                    />
+
+                    <DashboardCard
+                        icon={<CircleDollarSign size={21} />}
                         title="Today's earnings"
                         value="₹0"
                         description="Earnings will appear after completed rides."
@@ -460,8 +460,4 @@ function QuickAction({
             />
         </Link>
     );
-}
-
-function routerPush(href: string) {
-    window.location.href = href;
 }

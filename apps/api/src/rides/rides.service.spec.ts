@@ -93,6 +93,8 @@ function buildPrismaStub(
 function buildGatewayStub() {
     return {
         emitRideUpdated: jest.fn(),
+        emitRideRequestCreated: jest.fn(),
+        emitRideRequestRemoved: jest.fn(),
     };
 }
 
@@ -495,5 +497,78 @@ describe("RidesService.create", () => {
                 longitude: Number(DESTINATION_LOCATION.longitude),
             },
         );
+    });
+});
+
+// ── Batch 4: Driver Requests & Acceptance ──────────────────────────────────
+describe("RidesService — getAvailableRideRequests", () => {
+    it("returns available requests for an AVAILABLE driver", async () => {
+        const prisma = buildPrismaStub();
+        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({ status: "AVAILABLE" });
+        (prisma.ride.findMany as jest.Mock).mockResolvedValue([
+            { id: "ride-1", status: "SEARCHING_DRIVER", driverId: null },
+        ]);
+
+        const service = await buildService(prisma);
+        const results = await service.getAvailableRideRequests("driver-user-uuid");
+
+        expect(results).toHaveLength(1);
+        expect(prisma.ride.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    status: "SEARCHING_DRIVER",
+                    driverId: null,
+                }),
+            }),
+        );
+    });
+
+    it("returns empty array if driver is OFFLINE or BUSY", async () => {
+        const prisma = buildPrismaStub();
+        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({ status: "BUSY" });
+
+        const service = await buildService(prisma);
+        const results = await service.getAvailableRideRequests("driver-user-uuid");
+
+        expect(results).toEqual([]);
+        expect(prisma.ride.findMany).not.toHaveBeenCalled();
+    });
+});
+
+describe("RidesService — acceptRide", () => {
+    it("successfully accepts ride for an AVAILABLE driver", async () => {
+        const prisma = buildPrismaStub();
+        const gateway = buildGatewayStub();
+        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({ id: "driver-uuid", status: "AVAILABLE" });
+        (prisma.$transaction as jest.Mock).mockImplementation(async (cb) => {
+            const tx = {
+                driver: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+                ride: {
+                    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+                    findUnique: jest.fn().mockResolvedValue({
+                        id: "ride-1",
+                        status: "DRIVER_ASSIGNED",
+                        driverId: "driver-uuid",
+                        riderId: "rider-uuid",
+                    }),
+                },
+            };
+            return cb(tx);
+        });
+
+        const service = await buildService(prisma, gateway);
+        const result = await service.acceptRide("ride-1", "driver-user-uuid");
+
+        expect(result.accepted).toBe(true);
+        expect(result.ride?.status).toBe("DRIVER_ASSIGNED");
+        expect(gateway.emitRideRequestRemoved).toHaveBeenCalledWith("ride-1");
+    });
+
+    it("rejects acceptance if driver is NOT AVAILABLE", async () => {
+        const prisma = buildPrismaStub();
+        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({ id: "driver-uuid", status: "BUSY" });
+
+        const service = await buildService(prisma);
+        await expect(service.acceptRide("ride-1", "driver-user-uuid")).rejects.toThrow(BadRequestException);
     });
 });

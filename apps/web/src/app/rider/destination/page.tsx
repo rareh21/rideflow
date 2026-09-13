@@ -15,34 +15,44 @@ export default function DestinationPage() {
     const [localPickup, setLocalPickup] = useState<{ id: string; label: string } | null>(null);
     const [localDestination, setLocalDestination] = useState<{ id: string; label: string } | null>(null);
 
-    // Auto-detect current location on mount if pickup is hardcoded default or not set
+    // Auto-detect current location automatically on mount — no button click required
     useEffect(() => {
-        if (!pickup || pickup.label === "Current location · Hyderabad" || !pickup.locationId) {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    async (position) => {
-                        try {
-                            const resolved = await reverseGeocodeLocation(
-                                position.coords.latitude,
-                                position.coords.longitude,
-                            );
-                            setLocalPickup({ id: resolved.id, label: resolved.label });
-                            setPickup({
-                                label: resolved.label,
-                                locationId: resolved.id,
-                            });
-                        } catch {
-                            // Fallback gracefully if auto-detection fails silently on mount
-                        }
-                    },
-                    () => {},
-                    { enableHighAccuracy: true, timeout: 5000 },
-                );
-            }
-        } else if (pickup && !localPickup) {
+        // If pickup is valid and not placeholder, use it
+        if (
+            pickup?.locationId &&
+            pickup.locationId !== "596d2a57-754a-49d9-a174-15d553610510" &&
+            pickup.label &&
+            pickup.label !== "Current location · Hyderabad"
+        ) {
             setLocalPickup({ id: pickup.locationId, label: pickup.label });
+            return;
         }
-    }, [pickup, localPickup, setPickup]);
+
+        // Otherwise automatically auto-detect GPS position on mount
+        if (typeof window !== "undefined" && navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    try {
+                        const resolved = await reverseGeocodeLocation(
+                            position.coords.latitude,
+                            position.coords.longitude,
+                        );
+                        setLocalPickup({ id: resolved.id, label: resolved.label });
+                        setPickup({
+                            label: resolved.label,
+                            locationId: resolved.id,
+                        });
+                    } catch (err) {
+                        console.error("Auto-detect location error", err);
+                    }
+                },
+                (err) => {
+                    console.warn("Geolocation permission error", err);
+                },
+                { enableHighAccuracy: true, timeout: 8000 },
+            );
+        }
+    }, [pickup, setPickup]);
 
     function continueToRoute() {
         if (!localPickup || !localDestination) return;
@@ -86,15 +96,8 @@ export default function DestinationPage() {
                     <div className="mt-7 space-y-6">
                         <LocationAutocomplete
                             label="Pickup location"
-                            placeholder="Search pickup..."
-                            showAutoDetect
-                            initialValue={
-                                localPickup?.label && !localPickup.label.includes("(")
-                                    ? localPickup.label
-                                    : pickup?.label && !pickup.label.includes("(") && pickup.label !== "Current location · Hyderabad"
-                                    ? pickup.label
-                                    : ""
-                            }
+                            placeholder="Search or detecting current pickup..."
+                            initialValue={localPickup?.label || ""}
                             onLocationSelect={(id, label) => setLocalPickup(id ? { id, label } : null)}
                         />
 
