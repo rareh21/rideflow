@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { cancelRide, getRide } from "@/lib/rides";
@@ -26,6 +26,18 @@ export default function FindingDriverPage() {
 
     const [cancelling, setCancelling] = useState(false);
 
+    /**
+     * True when the server auto-cancelled because no driver accepted in time.
+     * Distinct from `error` so we can show a friendly, non-alarming message.
+     */
+    const [timedOut, setTimedOut] = useState(false);
+
+    /**
+     * Track whether a driver was ever assigned so we can distinguish a
+     * timeout-cancel (no driver) from a post-assignment cancel.
+     */
+    const driverWasAssigned = useRef(false);
+
     useEffect(() => {
         if (!rideId) {
             setError("Ride ID is missing.");
@@ -44,6 +56,17 @@ export default function FindingDriverPage() {
                 }
 
                 setRide(response);
+
+                if (response.driverId) {
+                    driverWasAssigned.current = true;
+                }
+
+                if (response.status === "CANCELLED" && !driverWasAssigned.current) {
+                    // Server already timed out this ride before the page loaded.
+                    setTimedOut(true);
+                    setLoading(false);
+                    return;
+                }
 
                 if (response.status !== "SEARCHING_DRIVER") {
                     router.replace(`/rider/rides/${response.id}`);
@@ -70,6 +93,19 @@ export default function FindingDriverPage() {
                 }
 
                 setRide(event.ride);
+
+                if (event.ride.driverId) {
+                    driverWasAssigned.current = true;
+                }
+
+                if (
+                    event.status === "CANCELLED" &&
+                    !driverWasAssigned.current
+                ) {
+                    // Server auto-cancelled: no driver accepted in time.
+                    setTimedOut(true);
+                    return;
+                }
 
                 if (event.status !== "SEARCHING_DRIVER") {
                     router.replace(`/rider/rides/${event.rideId}`);
@@ -126,6 +162,61 @@ export default function FindingDriverPage() {
         );
     }
 
+    /* ── Timeout screen ──────────────────────────────────────────────── */
+    if (timedOut) {
+        return (
+            <main className="flex min-h-screen items-center justify-center bg-rf-midnight px-6">
+                <section className="w-full max-w-md rounded-3xl bg-white p-8 text-center">
+
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
+                        {/* Clock icon */}
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-8 w-8 text-amber-500"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={1.8}
+                            aria-hidden="true"
+                        >
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                    </div>
+
+                    <p className="mt-8 text-sm font-bold tracking-wide text-rf-green">
+                        RIDEFLOW
+                    </p>
+
+                    <h1 className="mt-3 text-2xl font-bold">
+                        No driver available
+                    </h1>
+
+                    <p className="mt-2 text-sm text-rf-text-secondary">
+                        We couldn&apos;t find a driver for your ride within the search window. Your ride has been cancelled.
+                    </p>
+
+                    <Link
+                        href="/rider"
+                        className="mt-8 inline-flex w-full items-center justify-center rounded-2xl bg-rf-green px-6 py-3 text-sm font-semibold text-rf-midnight transition hover:opacity-90"
+                    >
+                        Try again
+                    </Link>
+
+                    {ride && (
+                        <Link
+                            href={`/rider/rides/${ride.id}`}
+                            className="mt-4 block text-sm font-semibold text-rf-text-secondary hover:text-rf-midnight"
+                        >
+                            View cancelled ride details
+                        </Link>
+                    )}
+                </section>
+            </main>
+        );
+    }
+
+    /* ── Generic error / ride-not-found ─────────────────────────────── */
     if (error || !ride) {
         return (
             <main className="flex min-h-screen items-center justify-center bg-rf-midnight px-6">
@@ -146,6 +237,7 @@ export default function FindingDriverPage() {
         );
     }
 
+    /* ── Searching screen ────────────────────────────────────────────── */
     return (
         <main className="flex min-h-screen items-center justify-center bg-rf-midnight px-6">
             <section className="w-full max-w-md rounded-3xl bg-white p-8 text-center">

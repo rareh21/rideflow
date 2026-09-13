@@ -7,7 +7,6 @@ import {
 } from "@nestjs/common";
 
 import {
-    Prisma,
     RideStatus,
 } from "@prisma/client";
 
@@ -15,6 +14,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CreateRideDto } from "./dto/create-ride.dto";
 import { CreateRideQuoteDto } from "./dto/create-ride-quote.dto";
 import { RidesGateway } from "./rides.gateway";
+import { RideTimeoutService } from "./ride-timeout.service";
 import { canTransitionRideStatus } from "./ride-status";
 import {
     haversineDistanceKm,
@@ -27,6 +27,7 @@ export class RidesService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly ridesGateway: RidesGateway,
+        private readonly rideTimeoutService: RideTimeoutService,
     ) { }
 
     private emitRideUpdated(
@@ -153,6 +154,10 @@ export class RidesService {
         });
 
         this.emitRideUpdated(ride);
+
+        // Start the no-driver-found timer. If no driver accepts within the
+        // configured window the ride is auto-cancelled server-side.
+        this.rideTimeoutService.scheduleTimeout(ride.id);
 
         return ride;
     }
@@ -454,6 +459,13 @@ export class RidesService {
         }
 
         /*
+         * Any successful status transition clears the pending search timeout.
+         * Covers rider manual cancel (SEARCHING_DRIVER → CANCELLED) and all
+         * other transitions away from SEARCHING_DRIVER.
+         */
+        this.rideTimeoutService.cancelTimer(rideId);
+
+        /*
          * Cancellation/completion of an assigned ride
          * must release the driver atomically.
          */
@@ -686,6 +698,9 @@ export class RidesService {
             };
         }
 
+        // Clear the search timeout — a driver was matched via admin assign.
+        this.rideTimeoutService.cancelTimer(rideId);
+
         this.emitRideUpdated(updatedRide);
 
         return {
@@ -816,6 +831,9 @@ export class RidesService {
         );
 
         if (acceptedRide) {
+            // Clear the search timeout — a driver has accepted.
+            this.rideTimeoutService.cancelTimer(rideId);
+
             this.emitRideUpdated(acceptedRide);
         }
 
