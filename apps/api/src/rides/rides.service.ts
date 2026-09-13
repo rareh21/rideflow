@@ -13,8 +13,14 @@ import {
 
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateRideDto } from "./dto/create-ride.dto";
+import { CreateRideQuoteDto } from "./dto/create-ride-quote.dto";
 import { RidesGateway } from "./rides.gateway";
 import { canTransitionRideStatus } from "./ride-status";
+import {
+    haversineDistanceKm,
+    estimatedDurationMinutes,
+} from "./utils/location-calculator";
+import { calculateFare } from "./utils/fare-calculator";
 
 @Injectable()
 export class RidesService {
@@ -93,6 +99,27 @@ export class RidesService {
             );
         }
 
+        if (dto.pickupLocationId === dto.destinationLocationId) {
+            throw new BadRequestException(
+                "Pickup and destination cannot be the same location",
+            );
+        }
+
+        /*
+         * Server-side fare computation — never trust client-supplied values.
+         * Haversine gives straight-line distance; the Route Preview module
+         * will replace this with a road-network calculation.
+         */
+        const distanceKm = haversineDistanceKm(
+            Number(pickupLocation.latitude),
+            Number(pickupLocation.longitude),
+            Number(destinationLocation.latitude),
+            Number(destinationLocation.longitude),
+        );
+
+        const durationMinutes = estimatedDurationMinutes(distanceKm);
+        const fare = calculateFare(dto.rideType, distanceKm, durationMinutes);
+
         const ride = await this.prisma.ride.create({
             data: {
                 riderId,
@@ -106,14 +133,11 @@ export class RidesService {
                 rideType:
                     dto.rideType,
 
-                estimatedFare:
-                    dto.estimatedFare,
+                estimatedFare: fare,
 
-                estimatedDistanceKm:
-                    dto.estimatedDistanceKm,
+                estimatedDistanceKm: distanceKm,
 
-                estimatedDurationMinutes:
-                    dto.estimatedDurationMinutes,
+                estimatedDurationMinutes: durationMinutes,
 
                 paymentMethod:
                     dto.paymentMethod,
@@ -131,6 +155,64 @@ export class RidesService {
         this.emitRideUpdated(ride);
 
         return ride;
+    }
+
+    /**
+     * Returns an estimated fare/distance/duration for the given route and
+     * ride type WITHOUT creating a Ride record.
+     *
+     * The quote is informational only. The final Ride record always recalculates
+     * these values server-side — the client cannot influence pricing by altering
+     * the quote payload before confirmation.
+     */
+    async createQuote(dto: CreateRideQuoteDto) {
+        const pickupLocation =
+            await this.prisma.location.findUnique({
+                where: { id: dto.pickupLocationId },
+            });
+
+        if (!pickupLocation) {
+            throw new NotFoundException(
+                "Pickup location not found",
+            );
+        }
+
+        const destinationLocation =
+            await this.prisma.location.findUnique({
+                where: { id: dto.destinationLocationId },
+            });
+
+        if (!destinationLocation) {
+            throw new NotFoundException(
+                "Destination location not found",
+            );
+        }
+
+        if (dto.pickupLocationId === dto.destinationLocationId) {
+            throw new BadRequestException(
+                "Pickup and destination cannot be the same location",
+            );
+        }
+
+        const distanceKm = haversineDistanceKm(
+            Number(pickupLocation.latitude),
+            Number(pickupLocation.longitude),
+            Number(destinationLocation.latitude),
+            Number(destinationLocation.longitude),
+        );
+
+        const durationMinutes = estimatedDurationMinutes(distanceKm);
+        const fare = calculateFare(dto.rideType, distanceKm, durationMinutes);
+
+        return {
+            pickupLocation,
+            destinationLocation,
+            rideType: dto.rideType,
+            estimatedDistanceKm: distanceKm,
+            estimatedDurationMinutes: durationMinutes,
+            estimatedFare: fare,
+            currency: "INR",
+        };
     }
 
     async findById(

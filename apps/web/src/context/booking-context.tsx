@@ -14,6 +14,7 @@ import type {
     LocationPoint,
 } from "@/types/booking";
 import type { RideOption } from "@/types/ride";
+import type { PaymentMethod, RideQuote } from "@/lib/rides";
 
 type BookingContextValue = BookingState & {
     setPickup: (pickup: LocationPoint) => void;
@@ -21,6 +22,8 @@ type BookingContextValue = BookingState & {
     setStep: (step: BookingStep) => void;
     resetBooking: () => void;
     selectRide: (ride: RideOption) => void;
+    setPaymentMethod: (method: PaymentMethod) => void;
+    setQuote: (quote: RideQuote | null) => void;
 };
 
 const BookingContext = createContext<
@@ -35,6 +38,8 @@ const initialState: BookingState = {
     destination: null,
     selectedRide: null,
     step: "destination",
+    paymentMethod: null,
+    quote: null,
 };
 
 export function BookingProvider({
@@ -50,15 +55,20 @@ export function BookingProvider({
         setState((current) => ({
             ...current,
             pickup,
+            quote: null,
         }));
     }
-
 
     function selectRide(ride: RideOption) {
         setState((current) => ({
             ...current,
             selectedRide: ride,
             step: "payment",
+            // Do NOT clear quote here. The quote was fetched specifically for
+            // this ride type — committing the selection preserves it so the
+            // payment and confirm pages can display the server fare.
+            // Quote is only cleared when pickup or destination changes (see
+            // setPickup / setDestination above), which genuinely invalidates it.
         }));
     }
 
@@ -67,6 +77,7 @@ export function BookingProvider({
             ...current,
             destination,
             step: "route",
+            quote: null,
         }));
     }
 
@@ -74,6 +85,20 @@ export function BookingProvider({
         setState((current) => ({
             ...current,
             step,
+        }));
+    }
+
+    function setPaymentMethod(method: PaymentMethod) {
+        setState((current) => ({
+            ...current,
+            paymentMethod: method,
+        }));
+    }
+
+    function setQuote(quote: RideQuote | null) {
+        setState((current) => ({
+            ...current,
+            quote,
         }));
     }
 
@@ -89,6 +114,8 @@ export function BookingProvider({
             setStep,
             resetBooking,
             selectRide,
+            setPaymentMethod,
+            setQuote,
         }),
         [state],
     );

@@ -12,6 +12,7 @@ import { RideStatus, UserRole } from "@prisma/client";
 
 import { RidesService } from "./rides.service";
 import { CreateRideDto } from "./dto/create-ride.dto";
+import { CreateRideQuoteDto } from "./dto/create-ride-quote.dto";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -38,6 +39,21 @@ export class RidesController {
             user.userId,
             dto,
         );
+    }
+
+    /**
+     * Returns a server-calculated fare/distance/duration estimate for the
+     * given pickup, destination, and ride type WITHOUT creating a Ride record.
+     *
+     * Declared before /:id routes — NestJS matches routes in declaration order
+     * and a string "quote" would otherwise be captured by the /:id parameter.
+     */
+    @Post("quote")
+    @Roles(UserRole.RIDER)
+    createQuote(
+        @Body() dto: CreateRideQuoteDto,
+    ) {
+        return this.ridesService.createQuote(dto);
     }
 
     @Get("me")

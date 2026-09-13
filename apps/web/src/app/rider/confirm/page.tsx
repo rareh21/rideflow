@@ -1,10 +1,26 @@
 "use client";
 
+import {
+    AlertCircle,
+    Banknote,
+    Check,
+    CreditCard,
+    Loader2,
+    MapPin,
+    Smartphone,
+} from "lucide-react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useBooking } from "@/context/booking-context";
 import { createRide } from "@/lib/rides";
-import { useState } from "react";
+import type { PaymentMethod } from "@/lib/rides";
+
+function PaymentIcon({ method }: { method: PaymentMethod }) {
+    if (method === "UPI") return <Smartphone size={16} />;
+    if (method === "CARD") return <CreditCard size={16} />;
+    return <Banknote size={16} />;
+}
 
 export default function ConfirmRidePage() {
     const router = useRouter();
@@ -13,12 +29,25 @@ export default function ConfirmRidePage() {
         pickup,
         destination,
         selectedRide,
+        quote,
+        paymentMethod,
+        resetBooking,
     } = useBooking();
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    if (!destination || !selectedRide) {
+    // Guard: all required booking state must be present
+    const isReady =
+        pickup?.locationId &&
+        destination?.locationId &&
+        pickup.locationId !== destination.locationId &&
+        selectedRide &&
+        quote &&
+        !isSubmitting &&
+        paymentMethod;
+
+    if (!destination || !selectedRide || !paymentMethod) {
         return (
             <main className="flex min-h-screen items-center justify-center bg-rf-surface-muted px-6">
                 <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-sm">
@@ -27,11 +56,11 @@ export default function ConfirmRidePage() {
                     </p>
 
                     <h1 className="mt-3 text-xl font-bold text-rf-text">
-                        Your ride isn't ready yet
+                        Your ride isn&apos;t ready yet
                     </h1>
 
-                    <p className="mt-2 text-sm text-rf-text-secondary">
-                        Choose a destination and ride before continuing.
+                    <p className="mt-2 text-sm text-rf-muted">
+                        Choose a destination, ride type, and payment method before continuing.
                     </p>
 
                     <button
@@ -47,15 +76,24 @@ export default function ConfirmRidePage() {
     }
 
     async function confirmRide() {
-        if (
-            !pickup?.locationId ||
-            !destination?.locationId ||
-            !selectedRide
-        ) {
-            setError(
-                "We're missing location or ride information. Please try again.",
-            );
-
+        if (!isReady) {
+            if (!quote) {
+                setError(
+                    "Your fare estimate is missing. Go back and select a ride type.",
+                );
+            } else if (!pickup?.locationId || !destination?.locationId) {
+                setError(
+                    "Location information is missing. Please start over.",
+                );
+            } else if (pickup.locationId === destination.locationId) {
+                setError(
+                    "Pickup and destination cannot be the same location.",
+                );
+            } else {
+                setError(
+                    "Please complete all booking steps before confirming.",
+                );
+            }
             return;
         }
 
@@ -63,22 +101,30 @@ export default function ConfirmRidePage() {
             setIsSubmitting(true);
             setError(null);
 
+            /*
+             * Send ONLY location IDs, ride type, and payment method.
+             * No fare, distance, or duration — the server recalculates those
+             * independently and never trusts client-supplied financial values.
+             */
             const ride = await createRide({
-                pickupLocationId: pickup.locationId,
-                destinationLocationId: destination.locationId,
-                rideType: selectedRide.category,
-                estimatedFare: selectedRide.fare,
-                estimatedDistanceKm: 3.8,
-                estimatedDurationMinutes: 12,
-                paymentMethod: "UPI",
+                pickupLocationId: pickup!.locationId!,
+                destinationLocationId: destination!.locationId!,
+                rideType: selectedRide!.category,
+                paymentMethod: paymentMethod!,
             });
 
+            resetBooking();
+
+            // Navigate without a browser reload; the existing realtime lifecycle
+            // (finding-driver → DRIVER_ASSIGNED → ...) continues from here.
             router.push(
                 `/rider/finding-driver?rideId=${ride.id}`,
             );
-        } catch {
+        } catch (err) {
             setError(
-                "We couldn't request your ride. Please try again.",
+                err instanceof Error
+                    ? err.message
+                    : "We couldn't request your ride. Please try again.",
             );
         } finally {
             setIsSubmitting(false);
@@ -92,7 +138,7 @@ export default function ConfirmRidePage() {
                 <button
                     type="button"
                     onClick={() => router.push("/rider/payment")}
-                    className="text-sm font-semibold text-rf-text-secondary transition hover:text-rf-green"
+                    className="text-sm font-semibold text-rf-muted transition hover:text-rf-green"
                 >
                     ← Back to payment
                 </button>
@@ -107,109 +153,163 @@ export default function ConfirmRidePage() {
                         Confirm your ride
                     </h1>
 
-                    <p className="mt-2 text-sm text-rf-text-secondary">
+                    <p className="mt-2 text-sm text-rf-muted">
                         Review everything before requesting your ride.
                     </p>
 
                     {/* Route */}
                     <div className="mt-8 rounded-2xl bg-rf-surface-muted p-5">
 
-                        <p className="text-xs font-bold uppercase tracking-wide text-rf-text-secondary">
+                        <p className="text-xs font-bold uppercase tracking-wide text-rf-muted">
                             Trip
                         </p>
 
                         <div className="mt-4 space-y-4">
 
-                            <div>
-                                <p className="text-xs text-rf-text-secondary">
-                                    Pickup
-                                </p>
+                            <div className="flex items-start gap-3">
+                                <span
+                                    className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rf-green/10 text-rf-green"
+                                    aria-hidden="true"
+                                >
+                                    <MapPin size={14} />
+                                </span>
 
-                                <p className="mt-1 text-sm font-semibold">
-                                    {pickup?.label}
-                                </p>
+                                <div>
+                                    <p className="text-xs text-rf-muted">Pickup</p>
+                                    <p className="mt-0.5 text-sm font-semibold">
+                                        {pickup?.label}
+                                    </p>
+                                </div>
                             </div>
 
-                            <div className="h-px bg-rf-border" />
+                            <div className="ml-3.5 h-5 w-px bg-rf-border" aria-hidden="true" />
 
-                            <div>
-                                <p className="text-xs text-rf-text-secondary">
-                                    Destination
-                                </p>
+                            <div className="flex items-start gap-3">
+                                <span
+                                    className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rf-green text-white"
+                                    aria-hidden="true"
+                                >
+                                    <MapPin size={14} />
+                                </span>
 
-                                <p className="mt-1 text-sm font-semibold">
-                                    {destination.label}
-                                </p>
+                                <div>
+                                    <p className="text-xs text-rf-muted">Destination</p>
+                                    <p className="mt-0.5 text-sm font-semibold">
+                                        {destination.label}
+                                    </p>
+                                </div>
                             </div>
 
                         </div>
                     </div>
 
-                    {/* Ride */}
+                    {/* Ride type */}
                     <div className="mt-4 rounded-2xl border border-rf-border p-5">
-
                         <div className="flex items-center justify-between">
-
                             <div>
-                                <p className="text-xs text-rf-text-secondary">
-                                    Ride
-                                </p>
-
+                                <p className="text-xs text-rf-muted">Ride</p>
                                 <p className="mt-1 text-base font-bold">
                                     {selectedRide.name}
                                 </p>
-
-                                <p className="mt-1 text-xs text-rf-text-secondary">
-                                    {selectedRide.seats} seats ·{" "}
-                                    {selectedRide.etaMinutes} min pickup
+                                <p className="mt-0.5 text-xs text-rf-muted">
+                                    {selectedRide.seats} seats
                                 </p>
                             </div>
 
-                            <p className="text-xl font-bold">
-                                ₹{selectedRide.fare}
-                            </p>
-
+                            <div className="text-right">
+                                <p className="text-xs text-rf-muted">Type</p>
+                                <p className="mt-1 inline-flex items-center rounded-full bg-rf-green/10 px-2.5 py-1 text-xs font-bold text-rf-green">
+                                    {selectedRide.category}
+                                </p>
+                            </div>
                         </div>
-
                     </div>
 
-                    {/* Fare */}
+                    {/* Server-calculated fare — clearly labelled as estimated */}
                     <div className="mt-4 rounded-2xl bg-rf-midnight p-5 text-white">
 
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm text-white/60">
-                                Estimated fare
-                            </span>
-
-                            <span className="text-lg font-bold">
-                                ₹{selectedRide.fare}
-                            </span>
-                        </div>
-
-                        <p className="mt-2 text-xs text-white/50">
-                            Final fare may vary based on the actual trip.
+                        <p className="text-xs font-bold uppercase tracking-wide text-rf-green">
+                            Estimated fare
                         </p>
 
+                        {quote ? (
+                            <>
+                                <div className="mt-3 flex items-baseline gap-2">
+                                    <span className="text-3xl font-bold">
+                                        ₹{quote.estimatedFare}
+                                    </span>
+                                    <span className="text-sm text-white/60">INR</span>
+                                </div>
+
+                                <div className="mt-3 flex items-center gap-4 text-sm text-white/60">
+                                    <span>{quote.estimatedDistanceKm.toFixed(1)} km</span>
+                                    <span aria-hidden="true">·</span>
+                                    <span>~{quote.estimatedDurationMinutes} min</span>
+                                </div>
+
+                                <p className="mt-3 text-xs text-white/40">
+                                    Calculated using straight-line distance and average city speed.
+                                    Final fare may vary once the driver&apos;s actual route is confirmed.
+                                </p>
+                            </>
+                        ) : (
+                            <p className="mt-3 text-sm text-white/60">
+                                Fare not available — go back and select a ride type.
+                            </p>
+                        )}
+
                     </div>
+
+                    {/* Payment method */}
+                    <div className="mt-4 flex items-center gap-3 rounded-2xl border border-rf-border p-4">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-rf-green/10 text-rf-green">
+                            <PaymentIcon method={paymentMethod} />
+                        </span>
+
+                        <div className="flex-1">
+                            <p className="text-xs text-rf-muted">Payment</p>
+                            <p className="mt-0.5 text-sm font-semibold">{paymentMethod}</p>
+                        </div>
+
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-rf-green" aria-hidden="true">
+                            <Check size={13} className="text-white" />
+                        </span>
+                    </div>
+
+                    {/* Error */}
                     {error && (
                         <div
                             role="alert"
-                            className="mt-4 rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700"
+                            aria-live="assertive"
+                            className="mt-5 flex items-start gap-3 rounded-2xl bg-red-50 p-4 text-sm text-red-700"
                         >
-                            {error}
+                            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                            <span>{error}</span>
                         </div>
                     )}
 
-                    {/* Confirm */}
+                    {/* Confirm CTA */}
                     <button
                         type="button"
                         onClick={() => void confirmRide()}
-                        disabled={isSubmitting}
-                        className="mt-6 h-14 w-full rounded-2xl bg-rf-green text-sm font-semibold text-white transition hover:bg-rf-green-dark disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={!isReady || isSubmitting}
+                        aria-label={
+                            isSubmitting
+                                ? "Requesting your ride, please wait"
+                                : !quote
+                                    ? "Fare estimate missing — go back and select a ride"
+                                    : "Confirm and request your ride"
+                        }
+                        className="mt-6 h-14 w-full rounded-2xl bg-rf-green text-sm font-semibold text-white transition hover:bg-rf-green-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rf-green focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                        {isSubmitting
-                            ? "Requesting your ride..."
-                            : "Confirm & request ride"}
+                        {isSubmitting ? (
+                            <span className="flex items-center justify-center gap-2">
+                                <Loader2 size={16} className="animate-spin" />
+                                Requesting your ride…
+                            </span>
+                        ) : (
+                            "Confirm & request ride"
+                        )}
                     </button>
 
                 </section>

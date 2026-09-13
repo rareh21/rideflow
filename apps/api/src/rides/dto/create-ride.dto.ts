@@ -1,36 +1,28 @@
 import {
-  IsEnum,
-  IsNumber,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Min,
+    IsEnum,
+    IsOptional,
+    IsUUID,
 } from "class-validator";
 import { PaymentMethod, RideType } from "@prisma/client";
 
+/**
+ * Fields accepted when creating a new ride.
+ *
+ * estimatedFare, estimatedDistanceKm, estimatedDurationMinutes are
+ * intentionally absent — the server calculates these values independently
+ * and never trusts client-supplied financial data.
+ */
 export class CreateRideDto {
-  @IsUUID()
-  pickupLocationId: string;
+    @IsUUID()
+    pickupLocationId!: string;
 
-  @IsUUID()
-  destinationLocationId: string;
+    @IsUUID()
+    destinationLocationId!: string;
 
-  @IsEnum(RideType)
-  rideType: RideType;
+    @IsEnum(RideType)
+    rideType!: RideType;
 
-  @IsNumber()
-  @Min(0)
-  estimatedFare: number;
-
-  @IsNumber()
-  @Min(0)
-  estimatedDistanceKm: number;
-
-  @IsNumber()
-  @Min(0)
-  estimatedDurationMinutes: number;
-
-  @IsOptional()
-  @IsEnum(PaymentMethod)
-  paymentMethod?: PaymentMethod;
+    @IsOptional()
+    @IsEnum(PaymentMethod)
+    paymentMethod?: PaymentMethod;
 }
