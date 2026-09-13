@@ -49,43 +49,44 @@ function decodePolyline(encoded: string): [number, number][] {
     return points;
 }
 
+/** Safely inject Leaflet CSS & JS onto document head if not already loaded. */
+function loadLeafletAssets(onLoad: () => void) {
+    if (typeof window === "undefined") return;
+
+    if ((window as unknown as { L?: unknown }).L) {
+        onLoad();
+        return;
+    }
+
+    if (!document.getElementById("leaflet-css")) {
+        const link = document.createElement("link");
+        link.id = "leaflet-css";
+        link.rel = "stylesheet";
+        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        document.head.appendChild(link);
+    }
+
+    const existingJs = document.getElementById("leaflet-js");
+    if (!existingJs) {
+        const script = document.createElement("script");
+        script.id = "leaflet-js";
+        script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+        script.onload = onLoad;
+        document.head.appendChild(script);
+    } else {
+        existingJs.addEventListener("load", onLoad);
+    }
+}
+
 export function RouteMap({ pickup, destination, encodedPolyline }: RouteMapProps) {
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapInstanceRef = useRef<unknown>(null);
     const [leafletLoaded, setLeafletLoaded] = useState(false);
 
-    // Dynamically inject Leaflet CSS & JS
     useEffect(() => {
-        if (typeof window === "undefined") return;
-
-        // Check if Leaflet script is already injected
-        if ((window as unknown as { L?: unknown }).L) {
-            setLeafletLoaded(true);
-            return;
-        }
-
-        const existingCss = document.getElementById("leaflet-css");
-        if (!existingCss) {
-            const link = document.createElement("link");
-            link.id = "leaflet-css";
-            link.rel = "stylesheet";
-            link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-            document.head.appendChild(link);
-        }
-
-        const existingJs = document.getElementById("leaflet-js");
-        if (!existingJs) {
-            const script = document.createElement("script");
-            script.id = "leaflet-js";
-            script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-            script.onload = () => setLeafletLoaded(true);
-            document.head.appendChild(script);
-        } else {
-            existingJs.addEventListener("load", () => setLeafletLoaded(true));
-        }
+        loadLeafletAssets(() => setLeafletLoaded(true));
     }, []);
 
-    // Initialize and update Leaflet Map
     useEffect(() => {
         if (!leafletLoaded || !mapContainerRef.current) return;
 
@@ -99,20 +100,20 @@ export function RouteMap({ pickup, destination, encodedPolyline }: RouteMapProps
 
         if (isNaN(pLat) || isNaN(pLng) || isNaN(dLat) || isNaN(dLng)) return;
 
-        // Destroy existing map instance on re-render
+        // Cleanup existing map instance on re-render
         if (mapInstanceRef.current) {
             (mapInstanceRef.current as { remove: () => void }).remove();
             mapInstanceRef.current = null;
         }
 
-        // Initialize Leaflet Map
+        // Initialize Map
         const map = (L.map as (el: HTMLElement, opts: unknown) => unknown)(
             mapContainerRef.current,
             { zoomControl: false },
         );
         mapInstanceRef.current = map;
 
-        // Add OpenStreetMap tiles (100% free, clean street map, no API key required)
+        // Tile layer (OpenStreetMap standard, 100% free, no key required)
         (
             L.tileLayer as (
                 url: string,
@@ -126,7 +127,7 @@ export function RouteMap({ pickup, destination, encodedPolyline }: RouteMapProps
             },
         ).addTo(map);
 
-        // Custom pickup marker icon (Green circle)
+        // Pickup & Destination Marker Icons
         const pickupIcon = (L.divIcon as (opts: unknown) => unknown)({
             className: "custom-pickup-marker",
             html: `<div style="background-color: #00D166; width: 22px; height: 22px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>`,
@@ -134,7 +135,6 @@ export function RouteMap({ pickup, destination, encodedPolyline }: RouteMapProps
             iconAnchor: [11, 11],
         });
 
-        // Custom destination marker icon (Midnight black pin)
         const destIcon = (L.divIcon as (opts: unknown) => unknown)({
             className: "custom-dest-marker",
             html: `<div style="background-color: #0F172A; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;"><div style="width: 8px; height: 8px; background-color: #00D166; border-radius: 50%;"></div></div>`,
@@ -142,7 +142,6 @@ export function RouteMap({ pickup, destination, encodedPolyline }: RouteMapProps
             iconAnchor: [12, 12],
         });
 
-        // Add Pickup Marker
         (
             L.marker as (
                 coords: [number, number],
@@ -150,7 +149,6 @@ export function RouteMap({ pickup, destination, encodedPolyline }: RouteMapProps
             ) => { addTo: (m: unknown) => unknown }
         )([pLat, pLng], { icon: pickupIcon }).addTo(map);
 
-        // Add Destination Marker
         (
             L.marker as (
                 coords: [number, number],
@@ -158,9 +156,8 @@ export function RouteMap({ pickup, destination, encodedPolyline }: RouteMapProps
             ) => { addTo: (m: unknown) => unknown }
         )([dLat, dLng], { icon: destIcon }).addTo(map);
 
-        // Draw Route Polyline
+        // Resolve Polyline Points
         let routePoints: [number, number][] = [];
-
         if (encodedPolyline && encodedPolyline.trim() !== "") {
             try {
                 routePoints = decodePolyline(encodedPolyline);
@@ -192,7 +189,7 @@ export function RouteMap({ pickup, destination, encodedPolyline }: RouteMapProps
             }).addTo(map);
         }
 
-        // Fit map bounds to encompass both pickup and destination with padding
+        // Fit Bounds
         const bounds = (
             L.latLngBounds as (points: [number, number][]) => unknown
         )([

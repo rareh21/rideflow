@@ -3,6 +3,7 @@ import {
     InternalServerErrorException,
     Logger,
     BadGatewayException,
+    BadRequestException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
@@ -45,15 +46,17 @@ interface GooglePlaceDetailsResponse {
     };
 }
 
+interface AddressComponent {
+    long_name: string;
+    types: string[];
+}
+
 interface GoogleGeocodeResponse {
     status: string;
     error_message?: string;
     results?: Array<{
         formatted_address: string;
-        address_components?: Array<{
-            long_name: string;
-            types: string[];
-        }>;
+        address_components?: AddressComponent[];
     }>;
 }
 
@@ -73,50 +76,61 @@ export class GooglePlacesProvider {
     constructor(private readonly config: ConfigService) {}
 
     /**
-     * Return autocomplete predictions for a search query.
-     * Tries Google Places API first. If Google API key is missing or Google API fails/returns 0 results,
-     * seamlessly searches OpenStreetMap Nominatim so ALL real locations in India/world are searchable!
+     * Returns autocomplete predictions for a location search query.
+     * Queries Google Places API first. If unavailable, falls back to OpenStreetMap Nominatim.
      */
     async autocomplete(query: string): Promise<PlacePrediction[]> {
         const apiKey = this.config.get<string>("GOOGLE_MAPS_API_KEY");
 
         if (apiKey) {
-            const params = new URLSearchParams({
-                input: query,
-                key: apiKey,
-                components: "country:in",
-                language: "en",
-            });
-
-            try {
-                const response = await fetch(
-                    `${AUTOCOMPLETE_URL}?${params.toString()}`,
-                );
-
-                if (response.ok) {
-                    const data =
-                        (await response.json()) as GoogleAutocompleteResponse;
-
-                    if (data.status === "OK" && data.predictions?.length > 0) {
-                        return data.predictions.map((p) => ({
-                            placeId: p.place_id,
-                            label:
-                                p.structured_formatting?.main_text ??
-                                p.description,
-                            description: p.description,
-                        }));
-                    }
-                }
-            } catch (err) {
-                this.logger.warn("Google Places Autocomplete error", err);
+            const googleResults = await this.searchGooglePlaces(query, apiKey);
+            if (googleResults.length > 0) {
+                return googleResults;
             }
         }
 
-        // Fallback: OpenStreetMap Nominatim search (Searches ALL real-world places, free, no key required)
         return this.searchNominatim(query);
     }
 
-    /** Real-world location search using OpenStreetMap Nominatim. */
+    /** Primary Google Places Autocomplete search. */
+    private async searchGooglePlaces(
+        query: string,
+        apiKey: string,
+    ): Promise<PlacePrediction[]> {
+        const params = new URLSearchParams({
+            input: query,
+            key: apiKey,
+            components: "country:in",
+            language: "en",
+        });
+
+        try {
+            const response = await fetch(
+                `${AUTOCOMPLETE_URL}?${params.toString()}`,
+            );
+
+            if (response.ok) {
+                const data =
+                    (await response.json()) as GoogleAutocompleteResponse;
+
+                if (data.status === "OK" && data.predictions?.length > 0) {
+                    return data.predictions.map((p) => ({
+                        placeId: p.place_id,
+                        label:
+                            p.structured_formatting?.main_text ??
+                            p.description,
+                        description: p.description,
+                    }));
+                }
+            }
+        } catch (err) {
+            this.logger.warn("Google Places Autocomplete fetch failed", err);
+        }
+
+        return [];
+    }
+
+    /** Secondary OpenStreetMap Nominatim search for global/India coverage. */
     async searchNominatim(query: string): Promise<PlacePrediction[]> {
         try {
             const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
@@ -147,27 +161,15 @@ export class GooglePlacesProvider {
                 });
             }
         } catch (err) {
-            this.logger.warn("Nominatim search failed", err);
+            this.logger.warn("Nominatim search fetch failed", err);
         }
         return [];
     }
 
     /** Return lat/lng and formatted address for a given place ID (Google or OSM). */
     async getPlaceGeometry(placeId: string): Promise<PlaceGeometry> {
-        // Handle OpenStreetMap place IDs: "osm:placeId:lat:lon"
         if (placeId.startsWith("osm:")) {
-            const parts = placeId.split(":");
-            if (parts.length >= 4) {
-                const lat = parseFloat(parts[2]);
-                const lon = parseFloat(parts[3]);
-                if (!isNaN(lat) && !isNaN(lon)) {
-                    return {
-                        latitude: lat,
-                        longitude: lon,
-                        formattedAddress: "Resolved location",
-                    };
-                }
-            }
+            return this.parseOsmPlaceId(placeId);
         }
 
         const apiKey = this.requireApiKey();
@@ -196,9 +198,6 @@ export class GooglePlacesProvider {
         }
 
         if (!response.ok) {
-            this.logger.error(
-                `Google Places Details HTTP ${response.status}`,
-            );
             throw new BadGatewayException(
                 "Could not retrieve location details. Please try again.",
             );
@@ -215,11 +214,6 @@ export class GooglePlacesProvider {
         }
 
         if (data.status !== "OK" || !data.result) {
-            this.logger.warn(
-                `Google Places Details status: ${data.status} ${
-                    data.error_message ? `(${data.error_message})` : ""
-                } for placeId: ${placeId}`,
-            );
             throw new BadGatewayException(
                 "Could not find the selected location. Please try another.",
             );
@@ -231,9 +225,6 @@ export class GooglePlacesProvider {
             typeof location?.lat !== "number" ||
             typeof location?.lng !== "number"
         ) {
-            this.logger.error(
-                "Google Places Details missing geometry for placeId: " + placeId,
-            );
             throw new InternalServerErrorException(
                 "Location details returned incomplete data.",
             );
@@ -249,7 +240,24 @@ export class GooglePlacesProvider {
         };
     }
 
-    /** Convert lat/lng coordinates to a human-readable address label. */
+    /** Parses coordinates embedded in OpenStreetMap place IDs. */
+    private parseOsmPlaceId(placeId: string): PlaceGeometry {
+        const parts = placeId.split(":");
+        if (parts.length >= 4) {
+            const lat = parseFloat(parts[2]);
+            const lon = parseFloat(parts[3]);
+            if (!isNaN(lat) && !isNaN(lon)) {
+                return {
+                    latitude: lat,
+                    longitude: lon,
+                    formattedAddress: "Resolved location",
+                };
+            }
+        }
+        throw new BadRequestException("Invalid OpenStreetMap place ID.");
+    }
+
+    /** Convert lat/lng coordinates to a human-readable area name. */
     async reverseGeocode(
         latitude: number,
         longitude: number,
@@ -257,51 +265,80 @@ export class GooglePlacesProvider {
         const apiKey = this.config.get<string>("GOOGLE_MAPS_API_KEY");
 
         if (apiKey) {
-            const params = new URLSearchParams({
-                latlng: `${latitude},${longitude}`,
-                key: apiKey,
-                language: "en",
-            });
-
-            try {
-                const response = await fetch(`${GEOCODE_URL}?${params.toString()}`);
-                if (response.ok) {
-                    const data = (await response.json()) as GoogleGeocodeResponse;
-
-                    if (data.status === "OK" && data.results && data.results.length > 0) {
-                        const result = data.results[0];
-                        const components = result.address_components || [];
-
-                        const sublocality = components.find(
-                            (c) =>
-                                c.types.includes("sublocality_level_1") ||
-                                c.types.includes("neighborhood") ||
-                                c.types.includes("sublocality"),
-                        );
-
-                        const city = components.find(
-                            (c) =>
-                                c.types.includes("locality") ||
-                                c.types.includes("administrative_area_level_2"),
-                        );
-
-                        if (sublocality && city && sublocality.long_name !== city.long_name) {
-                            return `${sublocality.long_name}, ${city.long_name}`;
-                        }
-
-                        if (sublocality) {
-                            return sublocality.long_name;
-                        }
-
-                        return result.formatted_address;
-                    }
-                }
-            } catch (err) {
-                this.logger.warn("Google Reverse geocode failed", err);
-            }
+            const googleLabel = await this.reverseGeocodeGoogle(
+                latitude,
+                longitude,
+                apiKey,
+            );
+            if (googleLabel) return googleLabel;
         }
 
-        // Fallback: OpenStreetMap Nominatim reverse geocoder (free, no key required)
+        return this.reverseGeocodeNominatim(latitude, longitude);
+    }
+
+    private async reverseGeocodeGoogle(
+        latitude: number,
+        longitude: number,
+        apiKey: string,
+    ): Promise<string | null> {
+        const params = new URLSearchParams({
+            latlng: `${latitude},${longitude}`,
+            key: apiKey,
+            language: "en",
+        });
+
+        try {
+            const response = await fetch(`${GEOCODE_URL}?${params.toString()}`);
+            if (response.ok) {
+                const data = (await response.json()) as GoogleGeocodeResponse;
+
+                if (data.status === "OK" && data.results && data.results.length > 0) {
+                    const result = data.results[0];
+                    return this.extractAreaFromAddressComponents(
+                        result.address_components || [],
+                        result.formatted_address,
+                    );
+                }
+            }
+        } catch (err) {
+            this.logger.warn("Google Reverse geocode failed", err);
+        }
+
+        return null;
+    }
+
+    private extractAreaFromAddressComponents(
+        components: AddressComponent[],
+        fallbackAddress: string,
+    ): string {
+        const sublocality = components.find(
+            (c) =>
+                c.types.includes("sublocality_level_1") ||
+                c.types.includes("neighborhood") ||
+                c.types.includes("sublocality"),
+        );
+
+        const city = components.find(
+            (c) =>
+                c.types.includes("locality") ||
+                c.types.includes("administrative_area_level_2"),
+        );
+
+        if (sublocality && city && sublocality.long_name !== city.long_name) {
+            return `${sublocality.long_name}, ${city.long_name}`;
+        }
+
+        if (sublocality) {
+            return sublocality.long_name;
+        }
+
+        return fallbackAddress;
+    }
+
+    private async reverseGeocodeNominatim(
+        latitude: number,
+        longitude: number,
+    ): Promise<string | null> {
         try {
             const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`;
             const response = await fetch(url, {
@@ -346,9 +383,7 @@ export class GooglePlacesProvider {
         const apiKey = this.config.get<string>("GOOGLE_MAPS_API_KEY");
 
         if (!apiKey) {
-            this.logger.error(
-                "GOOGLE_MAPS_API_KEY is not configured",
-            );
+            this.logger.error("GOOGLE_MAPS_API_KEY is not configured");
             throw new InternalServerErrorException(
                 "Location services are currently unavailable.",
             );
