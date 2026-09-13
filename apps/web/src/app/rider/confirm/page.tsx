@@ -248,8 +248,8 @@ export default function ConfirmRidePage() {
                                 </div>
 
                                 <p className="mt-3 text-xs text-white/40">
-                                    Calculated using straight-line distance and average city speed.
-                                    Final fare may vary once the driver&apos;s actual route is confirmed.
+                                    Calculated using real road distance and estimated driving time.
+                                    Final fare may differ slightly based on the driver&apos;s actual route.
                                 </p>
                             </>
                         ) : (

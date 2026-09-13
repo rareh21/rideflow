@@ -9,11 +9,13 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/context/auth-context";
+import { useBooking } from "@/context/booking-context";
 import { Can } from "@/authorization/Can";
 import { Permissions } from "@/authorization/permissions";
 
 export default function RiderPage() {
     const { user } = useAuth();
+    const { pickup } = useBooking();
 
     return (
         <main className="min-h-full bg-rf-surface-muted text-rf-text">
@@ -42,7 +44,22 @@ export default function RiderPage() {
                         <div className="mt-8 space-y-3">
 
                             {/* Pickup */}
-                            <div className="flex items-center gap-4 rounded-2xl bg-rf-surface-muted p-4">
+                            <Link
+                                href="/rider/destination"
+                                className="
+                                    flex items-center gap-4
+                                    rounded-2xl
+                                    border border-rf-border
+                                    bg-rf-surface-muted
+                                    p-4
+                                    transition
+                                    hover:border-rf-green
+                                    hover:shadow-sm
+                                    focus-visible:outline-none
+                                    focus-visible:ring-2
+                                    focus-visible:ring-rf-green
+                                "
+                            >
                                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rf-green/10 text-rf-green">
                                     <MapPin size={18} />
                                 </div>
@@ -53,10 +70,10 @@ export default function RiderPage() {
                                     </p>
 
                                     <p className="mt-1 text-sm font-semibold">
-                                        Current location · Hyderabad
+                                        {pickup?.label || "Set pickup location"}
                                     </p>
                                 </div>
-                            </div>
+                            </Link>
 
                             {/* Destination */}
                             <Link

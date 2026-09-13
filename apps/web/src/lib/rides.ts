@@ -92,7 +92,11 @@ export type RideQuote = {
     currency: "INR";
     pickupLocation: RideLocation;
     destinationLocation: RideLocation;
+    /** Google-encoded polyline for route visualization. Present when the
+     *  server routing provider returns it; may be absent in test/fallback. */
+    encodedPolyline?: string;
 };
+
 
 /**
  * Payload for POST /rides/quote.

@@ -394,10 +394,11 @@ export default function RideOptionsPage() {
                         </p>
 
                         <p className="mt-1 text-xs text-rf-muted">
-                            Fares are calculated using straight-line distance and average city speed.
-                            Final fare may differ once your driver&apos;s route is confirmed.
+                            Fares are calculated using real road distance and estimated driving time.
+                            Final fare may differ slightly based on the driver&apos;s actual route.
                         </p>
                     </div>
+
 
                     {/* Continue */}
                     <button

@@ -13,13 +13,11 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateRideDto } from "./dto/create-ride.dto";
 import { CreateRideQuoteDto } from "./dto/create-ride-quote.dto";
+import { CreateRoutePreviewDto } from "./dto/create-route-preview.dto";
 import { RidesGateway } from "./rides.gateway";
 import { RideTimeoutService } from "./ride-timeout.service";
 import { canTransitionRideStatus } from "./ride-status";
-import {
-    haversineDistanceKm,
-    estimatedDurationMinutes,
-} from "./utils/location-calculator";
+import { RoutingService } from "./routing/routing.service";
 import { calculateFare } from "./utils/fare-calculator";
 
 @Injectable()
@@ -28,6 +26,7 @@ export class RidesService {
         private readonly prisma: PrismaService,
         private readonly ridesGateway: RidesGateway,
         private readonly rideTimeoutService: RideTimeoutService,
+        private readonly routingService: RoutingService,
     ) { }
 
     private emitRideUpdated(
@@ -108,19 +107,25 @@ export class RidesService {
 
         /*
          * Server-side fare computation — never trust client-supplied values.
-         * Haversine gives straight-line distance; the Route Preview module
-         * will replace this with a road-network calculation.
+         * Real road distance and driving duration come from the routing provider;
+         * the fare formula is unchanged.
          */
-        const distanceKm = haversineDistanceKm(
-            Number(pickupLocation.latitude),
-            Number(pickupLocation.longitude),
-            Number(destinationLocation.latitude),
-            Number(destinationLocation.longitude),
+        const route = await this.routingService.getRoute(
+            {
+                latitude: Number(pickupLocation.latitude),
+                longitude: Number(pickupLocation.longitude),
+            },
+            {
+                latitude: Number(destinationLocation.latitude),
+                longitude: Number(destinationLocation.longitude),
+            },
         );
 
-        const durationMinutes = estimatedDurationMinutes(distanceKm);
+        const { distanceKm, durationMinutes } = route;
         const fare = calculateFare(dto.rideType, distanceKm, durationMinutes);
 
+        // Polyline is transient — not persisted in the Ride record.
+        // Route geometry for Active Ride is a separate schema decision (Batch 4+).
         const ride = await this.prisma.ride.create({
             data: {
                 riderId,
@@ -163,8 +168,10 @@ export class RidesService {
     }
 
     /**
-     * Returns an estimated fare/distance/duration for the given route and
-     * ride type WITHOUT creating a Ride record.
+     * Returns an estimated fare/distance/duration/polyline for the given route
+     * and ride type WITHOUT creating a Ride record.
+     *
+     * Uses real road routing via `RoutingService` (Google Routes API).
      *
      * The quote is informational only. The final Ride record always recalculates
      * these values server-side — the client cannot influence pricing by altering
@@ -199,14 +206,18 @@ export class RidesService {
             );
         }
 
-        const distanceKm = haversineDistanceKm(
-            Number(pickupLocation.latitude),
-            Number(pickupLocation.longitude),
-            Number(destinationLocation.latitude),
-            Number(destinationLocation.longitude),
+        const route = await this.routingService.getRoute(
+            {
+                latitude: Number(pickupLocation.latitude),
+                longitude: Number(pickupLocation.longitude),
+            },
+            {
+                latitude: Number(destinationLocation.latitude),
+                longitude: Number(destinationLocation.longitude),
+            },
         );
 
-        const durationMinutes = estimatedDurationMinutes(distanceKm);
+        const { distanceKm, durationMinutes, encodedPolyline } = route;
         const fare = calculateFare(dto.rideType, distanceKm, durationMinutes);
 
         return {
@@ -217,6 +228,65 @@ export class RidesService {
             estimatedDurationMinutes: durationMinutes,
             estimatedFare: fare,
             currency: "INR",
+            encodedPolyline,
+        };
+    }
+
+    /**
+     * Returns real road route data (distance, duration, polyline) for the
+     * given pickup and destination WITHOUT creating a Ride record or
+     * calculating a fare.
+     *
+     * Used by the Route Preview step before the rider selects a ride type.
+     * Protected by JWT + RIDER role on the controller.
+     */
+    async createRoutePreview(dto: CreateRoutePreviewDto) {
+        const pickupLocation =
+            await this.prisma.location.findUnique({
+                where: { id: dto.pickupLocationId },
+            });
+
+        if (!pickupLocation) {
+            throw new NotFoundException(
+                "Pickup location not found",
+            );
+        }
+
+        const destinationLocation =
+            await this.prisma.location.findUnique({
+                where: { id: dto.destinationLocationId },
+            });
+
+        if (!destinationLocation) {
+            throw new NotFoundException(
+                "Destination location not found",
+            );
+        }
+
+        if (dto.pickupLocationId === dto.destinationLocationId) {
+            throw new BadRequestException(
+                "Pickup and destination cannot be the same location",
+            );
+        }
+
+        const route = await this.routingService.getRoute(
+            {
+                latitude: Number(pickupLocation.latitude),
+                longitude: Number(pickupLocation.longitude),
+            },
+            {
+                latitude: Number(destinationLocation.latitude),
+                longitude: Number(destinationLocation.longitude),
+            },
+        );
+
+        return {
+            pickupLocation,
+            destinationLocation,
+            distanceKm: route.distanceKm,
+            durationMinutes: route.durationMinutes,
+            encodedPolyline: route.encodedPolyline,
+            provider: "google",
         };
     }
 

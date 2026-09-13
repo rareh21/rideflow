@@ -1,16 +1,17 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { NotFoundException, BadRequestException } from "@nestjs/common";
-import { RideType } from "@prisma/client";
 
 import { RidesService } from "./rides.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { RidesGateway } from "./rides.gateway";
+import { RideTimeoutService } from "./ride-timeout.service";
+import { RoutingService } from "./routing/routing.service";
 import { calculateFare } from "./utils/fare-calculator";
-import { haversineDistanceKm, estimatedDurationMinutes } from "./utils/location-calculator";
+
 
 /*
  * Minimal location fixtures with lat/lon that produce a non-trivial distance.
- * Hyderabad–Madhapur corridor (~3.8 km straight-line).
+ * Hyderabad–Madhapur corridor.
  */
 const PICKUP_LOCATION = {
     id: "pickup-uuid-1",
@@ -30,6 +31,16 @@ const DESTINATION_LOCATION = {
 
 const RIDER_USER = {
     id: "rider-user-uuid",
+};
+
+/**
+ * Fixed route data returned by the mocked RoutingService.
+ * Using real-looking road values so fare assertions are deterministic.
+ */
+const MOCK_ROUTE = {
+    distanceKm: 5.6,
+    durationMinutes: 14,
+    encodedPolyline: "mock_encoded_polyline",
 };
 
 /** Creates a minimal mock PrismaService for the given scenario. */
@@ -85,20 +96,39 @@ function buildGatewayStub() {
     };
 }
 
+/** Routing service stub that returns fixed route data. */
+function buildRoutingStub(route = MOCK_ROUTE) {
+    return {
+        getRoute: jest.fn().mockResolvedValue(route),
+    };
+}
+
+function buildTimeoutStub() {
+    return {
+        scheduleTimeout: jest.fn(),
+        cancelTimer: jest.fn(),
+    };
+}
+
 async function buildService(
     prismaStub: ReturnType<typeof buildPrismaStub>,
     gatewayStub = buildGatewayStub(),
+    routingStub = buildRoutingStub(),
+    timeoutStub = buildTimeoutStub(),
 ): Promise<RidesService> {
     const module: TestingModule = await Test.createTestingModule({
         providers: [
             RidesService,
             { provide: PrismaService, useValue: prismaStub },
             { provide: RidesGateway, useValue: gatewayStub },
+            { provide: RoutingService, useValue: routingStub },
+            { provide: RideTimeoutService, useValue: timeoutStub },
         ],
     }).compile();
 
     return module.get<RidesService>(RidesService);
 }
+
 
 // ---------------------------------------------------------------------------
 // Unit tests for fare-calculator (pure, no DI needed)
@@ -126,22 +156,7 @@ describe("calculateFare", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Unit tests for location-calculator (pure)
-// ---------------------------------------------------------------------------
-describe("estimatedDurationMinutes", () => {
-    it("returns at least 1 minute for very short distances", () => {
-        expect(estimatedDurationMinutes(0)).toBe(1);
-        expect(estimatedDurationMinutes(0.001)).toBe(1);
-    });
-
-    it("returns ceil((distanceKm / 25) * 60)", () => {
-        // 10 km / 25 km/h * 60 = 24 min
-        expect(estimatedDurationMinutes(10)).toBe(24);
-    });
-});
-
-// ---------------------------------------------------------------------------
-// RidesService.createQuote — integration with mocked Prisma
+// RidesService.createQuote — uses routing provider, not Haversine
 // ---------------------------------------------------------------------------
 describe("RidesService.createQuote", () => {
     it("returns a valid quote for a GO ride between two distinct locations", async () => {
@@ -163,6 +178,67 @@ describe("RidesService.createQuote", () => {
         expect(quote.estimatedDurationMinutes).toBeGreaterThanOrEqual(1);
         expect(typeof quote.estimatedFare).toBe("number");
         expect(quote.estimatedFare).toBeGreaterThan(0);
+    });
+
+    it("quote uses road distance from routing provider (not Haversine)", async () => {
+        const routing = buildRoutingStub(MOCK_ROUTE);
+        const service = await buildService(buildPrismaStub(), buildGatewayStub(), routing);
+
+        const quote = await service.createQuote({
+            pickupLocationId: PICKUP_LOCATION.id,
+            destinationLocationId: DESTINATION_LOCATION.id,
+            rideType: "GO",
+        });
+
+        // The routing provider must have been called
+        expect(routing.getRoute).toHaveBeenCalledTimes(1);
+        // Distance and duration must match what the routing provider returned
+        expect(quote.estimatedDistanceKm).toBe(MOCK_ROUTE.distanceKm);
+        expect(quote.estimatedDurationMinutes).toBe(MOCK_ROUTE.durationMinutes);
+        // Fare must match what the fare calculator would produce from those values
+        const expectedFare = calculateFare("GO", MOCK_ROUTE.distanceKm, MOCK_ROUTE.durationMinutes);
+        expect(quote.estimatedFare).toBe(expectedFare);
+    });
+
+    it("includes encodedPolyline from the routing provider", async () => {
+        const service = await buildService(buildPrismaStub());
+
+        const quote = await service.createQuote({
+            pickupLocationId: PICKUP_LOCATION.id,
+            destinationLocationId: DESTINATION_LOCATION.id,
+            rideType: "GO",
+        });
+
+        expect(quote.encodedPolyline).toBe(MOCK_ROUTE.encodedPolyline);
+    });
+
+    it("fare varies by ride type for the same route", async () => {
+        const routing = buildRoutingStub(MOCK_ROUTE);
+
+        // Build three separate service instances to avoid mock call count bleed
+        const svcGo = await buildService(buildPrismaStub(), buildGatewayStub(), buildRoutingStub(MOCK_ROUTE));
+        const svcPlus = await buildService(buildPrismaStub(), buildGatewayStub(), buildRoutingStub(MOCK_ROUTE));
+        const svcXl = await buildService(buildPrismaStub(), buildGatewayStub(), buildRoutingStub(MOCK_ROUTE));
+
+        const quoteGo = await svcGo.createQuote({
+            pickupLocationId: PICKUP_LOCATION.id,
+            destinationLocationId: DESTINATION_LOCATION.id,
+            rideType: "GO",
+        });
+        const quotePlus = await svcPlus.createQuote({
+            pickupLocationId: PICKUP_LOCATION.id,
+            destinationLocationId: DESTINATION_LOCATION.id,
+            rideType: "PLUS",
+        });
+        const quoteXl = await svcXl.createQuote({
+            pickupLocationId: PICKUP_LOCATION.id,
+            destinationLocationId: DESTINATION_LOCATION.id,
+            rideType: "XL",
+        });
+
+        expect(quoteGo.estimatedFare).toBeLessThan(quotePlus.estimatedFare);
+        expect(quotePlus.estimatedFare).toBeLessThan(quoteXl.estimatedFare);
+        void routing; // suppress unused warning
     });
 
     it("throws NotFoundException for an invalid pickup location", async () => {
@@ -207,39 +283,111 @@ describe("RidesService.createQuote", () => {
 });
 
 // ---------------------------------------------------------------------------
-// RidesService.create — server-trusted fare, client fare ignored
+// RidesService.createRoutePreview
+// ---------------------------------------------------------------------------
+describe("RidesService.createRoutePreview", () => {
+    it("returns route data without a fare field", async () => {
+        const service = await buildService(buildPrismaStub());
+
+        const preview = await service.createRoutePreview({
+            pickupLocationId: PICKUP_LOCATION.id,
+            destinationLocationId: DESTINATION_LOCATION.id,
+        });
+
+        expect(preview.distanceKm).toBe(MOCK_ROUTE.distanceKm);
+        expect(preview.durationMinutes).toBe(MOCK_ROUTE.durationMinutes);
+        expect(preview.encodedPolyline).toBe(MOCK_ROUTE.encodedPolyline);
+        expect(preview.provider).toBe("google");
+        // No fare on route-preview
+        expect((preview as Record<string, unknown>).estimatedFare).toBeUndefined();
+    });
+
+    it("throws NotFoundException for an invalid pickup", async () => {
+        const service = await buildService(buildPrismaStub({ pickup: null }));
+
+        await expect(
+            service.createRoutePreview({
+                pickupLocationId: "bad-id",
+                destinationLocationId: DESTINATION_LOCATION.id,
+            }),
+        ).rejects.toThrow(NotFoundException);
+    });
+
+    it("throws NotFoundException for an invalid destination", async () => {
+        const service = await buildService(buildPrismaStub({ destination: null }));
+
+        await expect(
+            service.createRoutePreview({
+                pickupLocationId: PICKUP_LOCATION.id,
+                destinationLocationId: "bad-id",
+            }),
+        ).rejects.toThrow(NotFoundException);
+    });
+
+    it("throws BadRequestException when pickup equals destination", async () => {
+        const service = await buildService(buildPrismaStub());
+
+        await expect(
+            service.createRoutePreview({
+                pickupLocationId: PICKUP_LOCATION.id,
+                destinationLocationId: PICKUP_LOCATION.id,
+            }),
+        ).rejects.toThrow(BadRequestException);
+    });
+
+    it("propagates routing provider errors to the caller", async () => {
+        const routing = buildRoutingStub();
+        (routing.getRoute as jest.Mock).mockRejectedValue(
+            new Error("Provider unavailable"),
+        );
+
+        const service = await buildService(buildPrismaStub(), buildGatewayStub(), routing);
+
+        await expect(
+            service.createRoutePreview({
+                pickupLocationId: PICKUP_LOCATION.id,
+                destinationLocationId: DESTINATION_LOCATION.id,
+            }),
+        ).rejects.toThrow("Provider unavailable");
+    });
+});
+
+// ---------------------------------------------------------------------------
+// RidesService.create — server-trusted fare, routing provider used
 // ---------------------------------------------------------------------------
 describe("RidesService.create", () => {
-    it("creates a ride with server-calculated fare for GO type", async () => {
+    it("creates a ride with server-calculated fare using road distance from routing provider", async () => {
+        const routing = buildRoutingStub(MOCK_ROUTE);
         const prisma = buildPrismaStub();
-        const service = await buildService(prisma);
+        const service = await buildService(prisma, buildGatewayStub(), routing);
 
-        const ride = await service.create("rider-user-uuid", {
+        await service.create("rider-user-uuid", {
             pickupLocationId: PICKUP_LOCATION.id,
             destinationLocationId: DESTINATION_LOCATION.id,
             rideType: "GO",
             paymentMethod: "UPI",
         });
 
+        // Routing provider must have been called
+        expect(routing.getRoute).toHaveBeenCalledTimes(1);
+
         const createCall = (prisma.ride.create as jest.Mock).mock.calls[0][0];
         const data = createCall.data;
 
-        // Server must have calculated these — they must be numeric and positive
-        expect(typeof data.estimatedFare).toBe("number");
-        expect(data.estimatedFare).toBeGreaterThan(0);
-        expect(typeof data.estimatedDistanceKm).toBe("number");
-        expect(data.estimatedDistanceKm).toBeGreaterThan(0);
-        expect(typeof data.estimatedDurationMinutes).toBe("number");
-        expect(data.estimatedDurationMinutes).toBeGreaterThanOrEqual(1);
+        // Persisted values must match routing provider output
+        expect(data.estimatedDistanceKm).toBe(MOCK_ROUTE.distanceKm);
+        expect(data.estimatedDurationMinutes).toBe(MOCK_ROUTE.durationMinutes);
+
+        // Fare must match calculateFare applied to road distance
+        const expectedFare = calculateFare("GO", MOCK_ROUTE.distanceKm, MOCK_ROUTE.durationMinutes);
+        expect(data.estimatedFare).toBe(expectedFare);
     });
 
-    it("ignores any client-supplied fare — the server always recalculates", async () => {
+    it("fare is server-calculated from road route — client cannot override it", async () => {
+        const routing = buildRoutingStub(MOCK_ROUTE);
         const prisma = buildPrismaStub();
-        const service = await buildService(prisma);
+        const service = await buildService(prisma, buildGatewayStub(), routing);
 
-        // The DTO no longer has estimatedFare — TypeScript prevents passing it.
-        // This test verifies the persisted fare is server-computed, not 0 or a
-        // magic number a malicious client might supply via raw HTTP.
         await service.create("rider-user-uuid", {
             pickupLocationId: PICKUP_LOCATION.id,
             destinationLocationId: DESTINATION_LOCATION.id,
@@ -250,17 +398,27 @@ describe("RidesService.create", () => {
         const createCall = (prisma.ride.create as jest.Mock).mock.calls[0][0];
         const fare = createCall.data.estimatedFare;
 
-        // Confirm it matches what the server calculator would produce
-        const distanceKm = haversineDistanceKm(
-            Number(PICKUP_LOCATION.latitude),
-            Number(PICKUP_LOCATION.longitude),
-            Number(DESTINATION_LOCATION.latitude),
-            Number(DESTINATION_LOCATION.longitude),
-        );
-        const durationMinutes = estimatedDurationMinutes(distanceKm);
-        const expectedFare = calculateFare("PLUS", distanceKm, durationMinutes);
+        const expectedFare = calculateFare("PLUS", MOCK_ROUTE.distanceKm, MOCK_ROUTE.durationMinutes);
 
         expect(fare).toBe(expectedFare);
+    });
+
+    it("polyline is NOT persisted in the Ride record", async () => {
+        const prisma = buildPrismaStub();
+        const service = await buildService(prisma);
+
+        await service.create("rider-user-uuid", {
+            pickupLocationId: PICKUP_LOCATION.id,
+            destinationLocationId: DESTINATION_LOCATION.id,
+            rideType: "GO",
+        });
+
+        const createCall = (prisma.ride.create as jest.Mock).mock.calls[0][0];
+        const data = createCall.data as Record<string, unknown>;
+
+        // Polyline must not be stored — it is transient
+        expect(data.encodedPolyline).toBeUndefined();
+        expect(data.routePolyline).toBeUndefined();
     });
 
     it("persists the selected payment method", async () => {
@@ -314,5 +472,28 @@ describe("RidesService.create", () => {
                 rideType: "GO",
             }),
         ).rejects.toThrow(BadRequestException);
+    });
+
+    it("calls routing provider with correct lat/lng derived from location records", async () => {
+        const routing = buildRoutingStub(MOCK_ROUTE);
+        const prisma = buildPrismaStub();
+        const service = await buildService(prisma, buildGatewayStub(), routing);
+
+        await service.create("rider-user-uuid", {
+            pickupLocationId: PICKUP_LOCATION.id,
+            destinationLocationId: DESTINATION_LOCATION.id,
+            rideType: "GO",
+        });
+
+        expect(routing.getRoute).toHaveBeenCalledWith(
+            {
+                latitude: Number(PICKUP_LOCATION.latitude),
+                longitude: Number(PICKUP_LOCATION.longitude),
+            },
+            {
+                latitude: Number(DESTINATION_LOCATION.latitude),
+                longitude: Number(DESTINATION_LOCATION.longitude),
+            },
+        );
     });
 });

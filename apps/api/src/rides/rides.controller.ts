@@ -13,6 +13,7 @@ import { RideStatus, UserRole } from "@prisma/client";
 import { RidesService } from "./rides.service";
 import { CreateRideDto } from "./dto/create-ride.dto";
 import { CreateRideQuoteDto } from "./dto/create-ride-quote.dto";
+import { CreateRoutePreviewDto } from "./dto/create-route-preview.dto";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -42,8 +43,26 @@ export class RidesController {
     }
 
     /**
-     * Returns a server-calculated fare/distance/duration estimate for the
-     * given pickup, destination, and ride type WITHOUT creating a Ride record.
+     * Returns real road route data (distance, duration, polyline) for a
+     * pickup/destination pair WITHOUT creating a Ride record or calculating
+     * a fare.
+     *
+     * Protected by JWT + RIDER role.
+     * Declared before /:id routes — NestJS matches routes in declaration order.
+     */
+    @Post("route-preview")
+    @Roles(UserRole.RIDER)
+    createRoutePreview(
+        @Body() dto: CreateRoutePreviewDto,
+    ) {
+        return this.ridesService.createRoutePreview(dto);
+    }
+
+    /**
+     * Returns a server-calculated fare/distance/duration/polyline estimate for
+     * the given pickup, destination, and ride type WITHOUT creating a Ride record.
+     *
+     * Uses real road routing via Google Routes API.
      *
      * Declared before /:id routes — NestJS matches routes in declaration order
      * and a string "quote" would otherwise be captured by the /:id parameter.
