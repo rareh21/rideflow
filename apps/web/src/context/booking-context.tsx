@@ -2,6 +2,7 @@
 
 import {
     createContext,
+    useCallback,
     useContext,
     useMemo,
     useState,
@@ -51,60 +52,55 @@ export function BookingProvider({
         initialState,
     );
 
-    function setPickup(pickup: LocationPoint) {
+    const setPickup = useCallback((pickup: LocationPoint) => {
         setState((current) => ({
             ...current,
             pickup,
             quote: null,
         }));
-    }
+    }, []);
 
-    function selectRide(ride: RideOption) {
+    const selectRide = useCallback((ride: RideOption) => {
         setState((current) => ({
             ...current,
             selectedRide: ride,
             step: "payment",
-            // Do NOT clear quote here. The quote was fetched specifically for
-            // this ride type — committing the selection preserves it so the
-            // payment and confirm pages can display the server fare.
-            // Quote is only cleared when pickup or destination changes (see
-            // setPickup / setDestination above), which genuinely invalidates it.
         }));
-    }
+    }, []);
 
-    function setDestination(destination: Destination) {
+    const setDestination = useCallback((destination: Destination) => {
         setState((current) => ({
             ...current,
             destination,
             step: "route",
             quote: null,
         }));
-    }
+    }, []);
 
-    function setStep(step: BookingStep) {
+    const setStep = useCallback((step: BookingStep) => {
         setState((current) => ({
             ...current,
             step,
         }));
-    }
+    }, []);
 
-    function setPaymentMethod(method: PaymentMethod) {
+    const setPaymentMethod = useCallback((method: PaymentMethod) => {
         setState((current) => ({
             ...current,
             paymentMethod: method,
         }));
-    }
+    }, []);
 
-    function setQuote(quote: RideQuote | null) {
+    const setQuote = useCallback((quote: RideQuote | null) => {
         setState((current) => ({
             ...current,
             quote,
         }));
-    }
+    }, []);
 
-    function resetBooking() {
+    const resetBooking = useCallback(() => {
         setState(initialState);
-    }
+    }, []);
 
     const value = useMemo(
         () => ({
@@ -117,7 +113,16 @@ export function BookingProvider({
             setPaymentMethod,
             setQuote,
         }),
-        [state],
+        [
+            state,
+            setPickup,
+            setDestination,
+            setStep,
+            resetBooking,
+            selectRide,
+            setPaymentMethod,
+            setQuote,
+        ],
     );
 
     return (

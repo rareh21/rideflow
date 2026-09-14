@@ -159,4 +159,13 @@ export class UsersController {
 			dto,
 		);
 	}
+
+	@Get(":id/rating")
+	async getUserRating(
+		@CurrentUser() user: AuthUser,
+		@Param("id") id: string,
+	) {
+		const targetUserId = id === "me" ? user.userId : id;
+		return this.usersService.getUserRating(targetUserId);
+	}
 }

@@ -28,6 +28,7 @@ import { subscribeToRideUpdates } from "@/lib/ride-realtime";
 import { Button } from "@/components/ui/button";
 import { RouteMap } from "@/components/route-map";
 import { RideReceipt } from "@/components/ride-receipt";
+import { RideReviewSection } from "@/components/ride-review-section";
 
 export default function RideDetailsPage() {
     const params = useParams<{
@@ -203,7 +204,7 @@ export default function RideDetailsPage() {
                         My rides
                     </Link>
 
-                    <div className="mt-6">
+                    <div className="mt-6 space-y-6">
                         <RideReceipt
                             rideId={receipt?.rideId ?? ride.id}
                             rideType={receipt?.rideType ?? ride.rideType}
@@ -231,6 +232,11 @@ export default function RideDetailsPage() {
                                     </Link>
                                 </div>
                             }
+                        />
+
+                        <RideReviewSection
+                            rideId={ride.id}
+                            targetRole="DRIVER"
                         />
                     </div>
                 </div>

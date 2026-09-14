@@ -239,3 +239,42 @@ export type RideReceiptData = {
 export async function getRideReceipt(rideId: string) {
     return api<RideReceiptData>(`/rides/${rideId}/receipt`);
 }
+
+export type RideReview = {
+    id: string;
+    rideId: string;
+    reviewerId: string;
+    revieweeId: string;
+    rating: number;
+    comment: string | null;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type CreateRideReviewPayload = {
+    rating: number;
+    comment?: string;
+};
+
+export type UserRatingSummary = {
+    averageRating: number | null;
+    totalRatings: number;
+};
+
+export async function createRideReview(
+    rideId: string,
+    payload: CreateRideReviewPayload,
+) {
+    return api<RideReview>(`/rides/${rideId}/review`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+}
+
+export async function getMyRideReview(rideId: string) {
+    return api<RideReview | null>(`/rides/${rideId}/review`);
+}
+
+export async function getUserRatingSummary(userId: string = "me") {
+    return api<UserRatingSummary>(`/users/${userId}/rating`);
+}

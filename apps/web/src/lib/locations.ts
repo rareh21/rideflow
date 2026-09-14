@@ -38,29 +38,71 @@ export async function searchLocations(
     );
 }
 
+const resolveLocationCache = new Map<
+    string,
+    { promise: Promise<ResolvedLocation>; timestamp: number }
+>();
+const RESOLVE_CACHE_TTL_MS = 30000;
+
 /**
  * Resolve a Google Place ID (or DB place ID) to a database Location record.
+ * Deduplicates in-flight calls to prevent duplicate resolve API requests.
  */
 export async function resolveLocation(
     placeId: string,
     label: string,
 ): Promise<ResolvedLocation> {
-    return api<ResolvedLocation>("/locations/resolve", {
+    const key = `${placeId}:${label}`;
+    const now = Date.now();
+    const existing = resolveLocationCache.get(key);
+
+    if (existing && now - existing.timestamp < RESOLVE_CACHE_TTL_MS) {
+        return existing.promise;
+    }
+
+    const promise = api<ResolvedLocation>("/locations/resolve", {
         method: "POST",
         body: JSON.stringify({ placeId, label }),
+    }).catch((err) => {
+        resolveLocationCache.delete(key);
+        throw err;
     });
+
+    resolveLocationCache.set(key, { promise, timestamp: now });
+    return promise;
 }
+
+const reverseGeocodeCache = new Map<
+    string,
+    { promise: Promise<ResolvedLocation>; timestamp: number }
+>();
+const CACHE_TTL_MS = 15000;
 
 /**
  * Auto-detect current location: reverse geocodes latitude/longitude coordinates
- * into a database Location record.
+ * into a database Location record. Includes automatic in-flight request
+ * deduplication and short-lived caching to prevent duplicate API requests.
  */
 export async function reverseGeocodeLocation(
     latitude: number,
     longitude: number,
 ): Promise<ResolvedLocation> {
-    return api<ResolvedLocation>("/locations/reverse-geocode", {
+    const key = `${latitude.toFixed(4)},${longitude.toFixed(4)}`;
+    const now = Date.now();
+    const existing = reverseGeocodeCache.get(key);
+
+    if (existing && now - existing.timestamp < CACHE_TTL_MS) {
+        return existing.promise;
+    }
+
+    const promise = api<ResolvedLocation>("/locations/reverse-geocode", {
         method: "POST",
         body: JSON.stringify({ latitude, longitude }),
+    }).catch((err) => {
+        reverseGeocodeCache.delete(key);
+        throw err;
     });
+
+    reverseGeocodeCache.set(key, { promise, timestamp: now });
+    return promise;
 }

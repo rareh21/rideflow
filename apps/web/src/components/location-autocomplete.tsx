@@ -91,6 +91,8 @@ export function LocationAutocomplete({
     }, []);
 
     async function chooseSuggestion(suggestion: LocationSuggestion) {
+        if (resolveLoading) return;
+
         setQuery(suggestion.label);
         setSuggestions([]);
         setOpen(false);

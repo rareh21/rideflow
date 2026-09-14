@@ -13,11 +13,13 @@ import {
     XCircle,
 } from "lucide-react";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { getRideReceipt, updateRideStatus, type Ride, type RideReceiptData, type RideStatus } from "@/lib/rides";
 import { determineVehicleType } from "@/lib/vehicles";
 import { RouteMap } from "@/components/route-map";
 import { RideReceipt } from "@/components/ride-receipt";
+import { RideReviewSection } from "@/components/ride-review-section";
 
 const STATUS_CONFIG: Record<
     RideStatus,
@@ -80,6 +82,7 @@ export function DriverCurrentRideCard({
     onUpdate,
     onCompleted,
 }: DriverCurrentRideCardProps) {
+    const router = useRouter();
     const [updating, setUpdating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<string | null>(null);
@@ -119,14 +122,9 @@ export function DriverCurrentRideCard({
                 setFeedback("Ride started. Have a safe trip!");
                 onUpdate?.(updated);
             } else if (nextStatus === "COMPLETED") {
-                try {
-                    const receiptData = await getRideReceipt(ride.id);
-                    setCompletedReceipt(receiptData);
-                } catch {
-                    // Fallback to ride object
-                }
-                setCompletedSummary(updated);
-                onUpdate?.(updated);
+                onCompleted?.();
+                router.push(`/driver/rides/${ride.id}`);
+                return;
             } else if (nextStatus === "CANCELLED") {
                 setFeedback("Ride cancelled.");
                 onCompleted?.();
@@ -172,6 +170,10 @@ export function DriverCurrentRideCard({
                             Done & Return to Dashboard
                         </button>
                     }
+                />
+                <RideReviewSection
+                    rideId={completedSummary.id}
+                    targetRole="RIDER"
                 />
             </div>
         );

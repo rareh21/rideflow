@@ -2,7 +2,7 @@
 
 import { ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 import { useBooking } from "@/context/booking-context";
 import { LocationAutocomplete } from "@/components/location-autocomplete";
@@ -14,6 +14,7 @@ export default function DestinationPage() {
 
     const [localPickup, setLocalPickup] = useState<{ id: string; label: string } | null>(null);
     const [localDestination, setLocalDestination] = useState<{ id: string; label: string } | null>(null);
+    const hasAttemptedDetect = useRef(false);
 
     // Auto-detect current location automatically on mount — no button click required
     useEffect(() => {
@@ -27,6 +28,11 @@ export default function DestinationPage() {
             setLocalPickup({ id: pickup.locationId, label: pickup.label });
             return;
         }
+
+        if (hasAttemptedDetect.current) {
+            return;
+        }
+        hasAttemptedDetect.current = true;
 
         // Otherwise automatically auto-detect GPS position on mount
         if (typeof window !== "undefined" && navigator.geolocation) {
@@ -105,6 +111,7 @@ export default function DestinationPage() {
                             label="Drop-off location"
                             placeholder="Search destination..."
                             autoFocus
+                            initialValue={localDestination?.label || ""}
                             onLocationSelect={(id, label) => setLocalDestination(id ? { id, label } : null)}
                         />
                     </div>

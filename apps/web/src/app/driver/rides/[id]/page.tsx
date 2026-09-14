@@ -26,6 +26,7 @@ import {
 import { subscribeToRideUpdates } from "@/lib/ride-realtime";
 import { Button } from "@/components/ui/button";
 import { RideReceipt } from "@/components/ride-receipt";
+import { RideReviewSection } from "@/components/ride-review-section";
 
 const ACTIONS: Partial<Record<RideStatus, {
     next: RideStatus;
@@ -175,7 +176,7 @@ export default function DriverRideDetailsPage() {
             <main className="min-h-full bg-[var(--rf-surface-muted)]">
                 <div className="mx-auto max-w-3xl px-4 py-8 pb-28 sm:px-6 lg:py-10 lg:pb-10">
                     <BackLink />
-                    <div className="mt-6">
+                    <div className="mt-6 space-y-6">
                         <RideReceipt
                             rideId={receipt?.rideId ?? ride.id}
                             rideType={receipt?.rideType ?? ride.rideType}
@@ -196,6 +197,11 @@ export default function DriverRideDetailsPage() {
                                     </Link>
                                 </div>
                             }
+                        />
+
+                        <RideReviewSection
+                            rideId={ride.id}
+                            targetRole="RIDER"
                         />
                     </div>
                 </div>

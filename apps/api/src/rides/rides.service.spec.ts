@@ -108,6 +108,16 @@ function buildPrismaStub(
             update: jest.fn().mockResolvedValue({}),
             updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         },
+        rideReview: {
+            create: jest.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) =>
+                Promise.resolve({ id: "review-1", ...data, createdAt: new Date() }),
+            ),
+            findUnique: jest.fn().mockResolvedValue(null),
+            aggregate: jest.fn().mockResolvedValue({
+                _avg: { rating: 4.5 },
+                _count: { rating: 2 },
+            }),
+        },
         $transaction: jest.fn().mockImplementation(async (cb) => {
             if (typeof cb === "function") {
                 return cb({
@@ -925,6 +935,162 @@ describe("RidesService — getReceipt (Batch 6)", () => {
         const receipt = await service.getReceipt("ride-1", "rider-user-uuid");
 
         expect(receipt.paymentMethod).toBe("UPI");
+    });
+
+    describe("createReview, getReview, and getUserRatingSummary", () => {
+        it("allows rider to review a completed ride", async () => {
+            const prisma = buildPrismaStub();
+            (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+                id: "ride-1",
+                status: "COMPLETED",
+                riderId: "rider-user-uuid",
+                driverId: "driver-uuid",
+                driver: { userId: "driver-user-uuid" },
+            });
+
+            const service = await buildService(prisma);
+            const review = await service.createReview("rider-user-uuid", "ride-1", {
+                rating: 5,
+                comment: "Excellent drive!",
+            });
+
+            expect(review.rating).toBe(5);
+            expect(review.comment).toBe("Excellent drive!");
+            expect(review.reviewerId).toBe("rider-user-uuid");
+            expect(review.revieweeId).toBe("driver-user-uuid");
+        });
+
+        it("allows driver to review a completed ride", async () => {
+            const prisma = buildPrismaStub();
+            (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+                id: "ride-1",
+                status: "COMPLETED",
+                riderId: "rider-user-uuid",
+                driverId: "driver-uuid",
+                driver: { userId: "driver-user-uuid" },
+            });
+
+            const service = await buildService(prisma);
+            const review = await service.createReview("driver-user-uuid", "ride-1", {
+                rating: 4,
+            });
+
+            expect(review.rating).toBe(4);
+            expect(review.reviewerId).toBe("driver-user-uuid");
+            expect(review.revieweeId).toBe("rider-user-uuid");
+        });
+
+        it("rejects review if ride is not completed", async () => {
+            const prisma = buildPrismaStub();
+            (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+                id: "ride-1",
+                status: "IN_PROGRESS",
+                riderId: "rider-user-uuid",
+                driverId: "driver-uuid",
+                driver: { userId: "driver-user-uuid" },
+            });
+
+            const service = await buildService(prisma);
+            await expect(
+                service.createReview("rider-user-uuid", "ride-1", { rating: 5 }),
+            ).rejects.toThrow("This ride cannot be reviewed until it is completed.");
+        });
+
+        it("rejects review if user did not participate in the ride", async () => {
+            const prisma = buildPrismaStub();
+            (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+                id: "ride-1",
+                status: "COMPLETED",
+                riderId: "rider-user-uuid",
+                driverId: "driver-uuid",
+                driver: { userId: "driver-user-uuid" },
+            });
+
+            const service = await buildService(prisma);
+            await expect(
+                service.createReview("other-user-uuid", "ride-1", { rating: 5 }),
+            ).rejects.toThrow("You can only review rides you participated in.");
+        });
+
+        it("rejects rider review if completed ride has no driver", async () => {
+            const prisma = buildPrismaStub();
+            (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+                id: "ride-1",
+                status: "COMPLETED",
+                riderId: "rider-user-uuid",
+                driverId: null,
+                driver: null,
+            });
+
+            const service = await buildService(prisma);
+            await expect(
+                service.createReview("rider-user-uuid", "ride-1", { rating: 5 }),
+            ).rejects.toThrow("This ride does not have an assigned driver to review.");
+        });
+
+        it("rejects duplicate review submission", async () => {
+            const prisma = buildPrismaStub();
+            (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+                id: "ride-1",
+                status: "COMPLETED",
+                riderId: "rider-user-uuid",
+                driverId: "driver-uuid",
+                driver: { userId: "driver-user-uuid" },
+            });
+            (prisma.rideReview.findUnique as jest.Mock).mockResolvedValue({
+                id: "existing-review-uuid",
+                rating: 5,
+            });
+
+            const service = await buildService(prisma);
+            await expect(
+                service.createReview("rider-user-uuid", "ride-1", { rating: 5 }),
+            ).rejects.toThrow("You have already reviewed this ride.");
+        });
+
+        it("returns user's existing review or null", async () => {
+            const prisma = buildPrismaStub();
+            (prisma.rideReview.findUnique as jest.Mock).mockResolvedValueOnce({
+                id: "review-1",
+                rating: 5,
+                comment: "Great",
+            }).mockResolvedValueOnce(null);
+
+            const service = await buildService(prisma);
+            const found = await service.getReview("rider-user-uuid", "ride-1");
+            expect(found?.rating).toBe(5);
+
+            const missing = await service.getReview("rider-user-uuid", "ride-2");
+            expect(missing).toBeNull();
+        });
+
+        it("calculates aggregate rating correctly", async () => {
+            const prisma = buildPrismaStub();
+            (prisma.rideReview.aggregate as jest.Mock).mockResolvedValue({
+                _avg: { rating: 4.766 },
+                _count: { rating: 128 },
+            });
+
+            const service = await buildService(prisma);
+            const summary = await service.getUserRatingSummary("target-user-uuid");
+
+            expect(summary.averageRating).toBe(4.8);
+            expect(summary.totalRatings).toBe(128);
+        });
+
+        it("returns null averageRating if no ratings exist", async () => {
+            const prisma = buildPrismaStub();
+            (prisma.rideReview.aggregate as jest.Mock).mockResolvedValue({
+                _avg: { rating: null },
+                _count: { rating: 0 },
+            });
+
+            const service = await buildService(prisma);
+            const summary = await service.getUserRatingSummary("target-user-uuid");
+
+            expect(summary.averageRating).toBeNull();
+            expect(summary.totalRatings).toBe(0);
+        });
     });
 });
 

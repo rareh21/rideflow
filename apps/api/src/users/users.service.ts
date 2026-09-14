@@ -311,4 +311,23 @@ export class UsersService {
             success: true,
         };
     }
+
+    async getUserRating(userId: string) {
+        const aggregate = await this.prisma.rideReview.aggregate({
+            where: { revieweeId: userId },
+            _avg: { rating: true },
+            _count: { rating: true },
+        });
+
+        const totalRatings = aggregate._count.rating;
+        const averageRating =
+            totalRatings > 0 && aggregate._avg.rating !== null
+                ? Math.round(aggregate._avg.rating * 10) / 10
+                : null;
+
+        return {
+            averageRating,
+            totalRatings,
+        };
+    }
 }

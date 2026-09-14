@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 
 import {
+    Prisma,
     RideStatus,
     RideType,
 } from "@prisma/client";
@@ -15,6 +16,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CreateRideDto } from "./dto/create-ride.dto";
 import { CreateRideQuoteDto } from "./dto/create-ride-quote.dto";
 import { CreateRoutePreviewDto } from "./dto/create-route-preview.dto";
+import { CreateRideReviewDto } from "./dto/create-ride-review.dto";
 import { RidesGateway } from "./rides.gateway";
 import { RideTimeoutService } from "./ride-timeout.service";
 import { canTransitionRideStatus } from "./ride-status";
@@ -1062,5 +1064,116 @@ export class RidesService {
         });
 
         return currentRide ?? null;
+    }
+
+    async createReview(
+        userId: string,
+        rideId: string,
+        dto: CreateRideReviewDto,
+    ) {
+        const ride = await this.prisma.ride.findUnique({
+            where: { id: rideId },
+            include: {
+                driver: {
+                    select: {
+                        userId: true,
+                    },
+                },
+            },
+        });
+
+        if (!ride) {
+            throw new NotFoundException("Ride not found");
+        }
+
+        if (ride.status !== RideStatus.COMPLETED) {
+            throw new BadRequestException("This ride cannot be reviewed until it is completed.");
+        }
+
+        let revieweeId: string;
+
+        if (ride.riderId === userId) {
+            // Rider is reviewing the driver
+            if (!ride.driverId || !ride.driver || !ride.driver.userId) {
+                throw new BadRequestException("This ride does not have an assigned driver to review.");
+            }
+            revieweeId = ride.driver.userId;
+        } else if (ride.driver && ride.driver.userId === userId) {
+            // Driver is reviewing the rider
+            revieweeId = ride.riderId;
+        } else {
+            throw new ForbiddenException("You can only review rides you participated in.");
+        }
+
+        if (userId === revieweeId) {
+            throw new BadRequestException("You cannot review yourself.");
+        }
+
+        const existingReview = await this.prisma.rideReview.findUnique({
+            where: {
+                rideId_reviewerId: {
+                    rideId,
+                    reviewerId: userId,
+                },
+            },
+        });
+
+        if (existingReview) {
+            throw new ConflictException("You have already reviewed this ride.");
+        }
+
+        const trimmedComment = dto.comment?.trim() || null;
+
+        try {
+            return await this.prisma.rideReview.create({
+                data: {
+                    rideId,
+                    reviewerId: userId,
+                    revieweeId,
+                    rating: dto.rating,
+                    comment: trimmedComment,
+                },
+            });
+        } catch (error) {
+            if (
+                error instanceof Prisma.PrismaClientKnownRequestError &&
+                error.code === "P2002"
+            ) {
+                throw new ConflictException("You have already reviewed this ride.");
+            }
+            throw error;
+        }
+    }
+
+    async getReview(userId: string, rideId: string) {
+        const review = await this.prisma.rideReview.findUnique({
+            where: {
+                rideId_reviewerId: {
+                    rideId,
+                    reviewerId: userId,
+                },
+            },
+        });
+
+        return review ?? null;
+    }
+
+    async getUserRatingSummary(userId: string) {
+        const aggregate = await this.prisma.rideReview.aggregate({
+            where: { revieweeId: userId },
+            _avg: { rating: true },
+            _count: { rating: true },
+        });
+
+        const totalRatings = aggregate._count.rating;
+        const averageRating =
+            totalRatings > 0 && aggregate._avg.rating !== null
+                ? Math.round(aggregate._avg.rating * 10) / 10
+                : null;
+
+        return {
+            averageRating,
+            totalRatings,
+        };
     }
 }

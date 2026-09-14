@@ -7,6 +7,7 @@ import {
     UserRound,
     ChevronRight,
     Radio,
+    Star,
 } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -25,7 +26,9 @@ import type {
 import {
     getDriverRideRequests,
     getDriverCurrentRide,
+    getUserRatingSummary,
     type Ride,
+    type UserRatingSummary,
 } from "@/lib/rides";
 import { determineVehicleType } from "@/lib/vehicles";
 import { Button } from "@/components/ui/button";
@@ -37,6 +40,7 @@ export default function DriverDashboardPage() {
     const [driver, setDriver] = useState<DriverProfile | null>(null);
     const [requestCount, setRequestCount] = useState<number>(0);
     const [activeRide, setActiveRide] = useState<Ride | null>(null);
+    const [ratingSummary, setRatingSummary] = useState<UserRatingSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [updatingStatus, setUpdatingStatus] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -52,6 +56,13 @@ export default function DriverDashboardPage() {
 
             const data = await getMyDriver();
             setDriver(data);
+
+            try {
+                const summary = await getUserRatingSummary("me");
+                setRatingSummary(summary);
+            } catch {
+                setRatingSummary(null);
+            }
 
             const vt = data.vehicle ? determineVehicleType(data.vehicle.make, data.vehicle.model) : null;
 
@@ -337,10 +348,18 @@ export default function DriverDashboardPage() {
                     />
 
                     <DashboardCard
-                        icon={<CircleDollarSign size={21} />}
-                        title="Today's earnings"
-                        value="₹0"
-                        description="Earnings will appear after completed rides."
+                        icon={<Star size={21} className="fill-amber-400 text-amber-500" />}
+                        title="Driver Rating"
+                        value={
+                            ratingSummary?.averageRating
+                                ? `★ ${ratingSummary.averageRating}`
+                                : "No ratings yet"
+                        }
+                        description={
+                            ratingSummary?.totalRatings
+                                ? `${ratingSummary.totalRatings} rating${ratingSummary.totalRatings === 1 ? "" : "s"}`
+                                : "No ratings received yet."
+                        }
                     />
 
                     <DashboardCard

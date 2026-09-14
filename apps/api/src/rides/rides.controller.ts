@@ -14,6 +14,7 @@ import { RidesService } from "./rides.service";
 import { CreateRideDto } from "./dto/create-ride.dto";
 import { CreateRideQuoteDto } from "./dto/create-ride-quote.dto";
 import { CreateRoutePreviewDto } from "./dto/create-route-preview.dto";
+import { CreateRideReviewDto } from "./dto/create-ride-review.dto";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -127,6 +128,38 @@ export class RidesController {
         return this.ridesService.getReceipt(
             rideId,
             user.userId,
+        );
+    }
+
+    @Post(":id/review")
+    @Roles(
+        UserRole.RIDER,
+        UserRole.DRIVER,
+    )
+    createReview(
+        @Param("id") rideId: string,
+        @CurrentUser() user: AuthUser,
+        @Body() dto: CreateRideReviewDto,
+    ) {
+        return this.ridesService.createReview(
+            user.userId,
+            rideId,
+            dto,
+        );
+    }
+
+    @Get(":id/review")
+    @Roles(
+        UserRole.RIDER,
+        UserRole.DRIVER,
+    )
+    getReview(
+        @Param("id") rideId: string,
+        @CurrentUser() user: AuthUser,
+    ) {
+        return this.ridesService.getReview(
+            user.userId,
+            rideId,
         );
     }
 
