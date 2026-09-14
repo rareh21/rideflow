@@ -540,7 +540,11 @@ describe("RidesService.create", () => {
 describe("RidesService — getAvailableRideRequests", () => {
     it("returns available requests for an AVAILABLE driver", async () => {
         const prisma = buildPrismaStub();
-        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({ status: "AVAILABLE" });
+        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({
+            id: "driver-uuid",
+            status: "AVAILABLE",
+            vehicle: { make: "Toyota", model: "Camry" },
+        });
         (prisma.ride.findMany as jest.Mock).mockResolvedValue([
             { id: "ride-1", status: "SEARCHING_DRIVER", driverId: null },
         ]);
@@ -561,7 +565,11 @@ describe("RidesService — getAvailableRideRequests", () => {
 
     it("returns empty array if driver is OFFLINE or BUSY", async () => {
         const prisma = buildPrismaStub();
-        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({ status: "BUSY" });
+        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({
+            id: "driver-uuid",
+            status: "BUSY",
+            vehicle: { make: "Toyota", model: "Camry" },
+        });
 
         const service = await buildService(prisma);
         const results = await service.getAvailableRideRequests("driver-user-uuid");
@@ -575,7 +583,12 @@ describe("RidesService — acceptRide", () => {
     it("successfully accepts ride for an AVAILABLE driver", async () => {
         const prisma = buildPrismaStub();
         const gateway = buildGatewayStub();
-        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({ id: "driver-uuid", status: "AVAILABLE" });
+        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({
+            id: "driver-uuid",
+            status: "AVAILABLE",
+            vehicle: { make: "Toyota", model: "Etios" },
+        });
+        (prisma.ride.findUnique as jest.Mock).mockResolvedValue({ rideType: "GO" });
         (prisma.$transaction as jest.Mock).mockImplementation(async (cb) => {
             const tx = {
                 driver: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
@@ -602,7 +615,11 @@ describe("RidesService — acceptRide", () => {
 
     it("rejects acceptance if driver is NOT AVAILABLE", async () => {
         const prisma = buildPrismaStub();
-        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({ id: "driver-uuid", status: "BUSY" });
+        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({
+            id: "driver-uuid",
+            status: "BUSY",
+            vehicle: { make: "Toyota", model: "Etios" },
+        });
 
         const service = await buildService(prisma);
         await expect(service.acceptRide("ride-1", "driver-user-uuid")).rejects.toThrow(BadRequestException);
@@ -653,8 +670,7 @@ describe("RidesService — getDriverCurrentRide", () => {
     });
 
     it("throws NotFoundException if driver profile is missing", async () => {
-        const prisma = buildPrismaStub();
-        (prisma.driver.findUnique as jest.Mock).mockResolvedValue(null);
+        const prisma = buildPrismaStub({ driver: null });
 
         const service = await buildService(prisma);
         await expect(service.getDriverCurrentRide("unknown-user")).rejects.toThrow(NotFoundException);
@@ -677,6 +693,7 @@ describe("RidesService — updateStatus (Batch 5 Lifecycle & Completion)", () =>
             status: "DRIVER_ARRIVING",
             riderId: "rider-uuid",
             driverId: "driver-uuid",
+            driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "BUSY" },
         });
 
         const service = await buildService(prisma, gateway);
@@ -701,6 +718,7 @@ describe("RidesService — updateStatus (Batch 5 Lifecycle & Completion)", () =>
             status: "DRIVER_ARRIVED",
             riderId: "rider-uuid",
             driverId: "driver-uuid",
+            driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "BUSY" },
         });
 
         const service = await buildService(prisma, gateway);
@@ -725,6 +743,7 @@ describe("RidesService — updateStatus (Batch 5 Lifecycle & Completion)", () =>
             status: "IN_PROGRESS",
             riderId: "rider-uuid",
             driverId: "driver-uuid",
+            driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "BUSY" },
         });
 
         const service = await buildService(prisma, gateway);
@@ -753,6 +772,7 @@ describe("RidesService — updateStatus (Batch 5 Lifecycle & Completion)", () =>
                         status: "COMPLETED",
                         riderId: "rider-uuid",
                         driverId: "driver-uuid",
+                        driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "AVAILABLE" },
                     }),
                 },
                 driver: {
