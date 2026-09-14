@@ -572,3 +572,180 @@ describe("RidesService — acceptRide", () => {
         await expect(service.acceptRide("ride-1", "driver-user-uuid")).rejects.toThrow(BadRequestException);
     });
 });
+
+// ── Batch 5: Driver Ride Execution ──────────────────────────────────────────
+describe("RidesService — getDriverCurrentRide", () => {
+    it("returns current active ride for an authenticated driver", async () => {
+        const prisma = buildPrismaStub();
+        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({ id: "driver-uuid" });
+        (prisma.ride.findFirst as jest.Mock).mockResolvedValue({
+            id: "ride-active-1",
+            status: "DRIVER_ARRIVING",
+            driverId: "driver-uuid",
+            pickupLocation: PICKUP_LOCATION,
+            destinationLocation: DESTINATION_LOCATION,
+        });
+
+        const service = await buildService(prisma);
+        const currentRide = await service.getDriverCurrentRide("driver-user-uuid");
+
+        expect(currentRide).toMatchObject({
+            id: "ride-active-1",
+            status: "DRIVER_ARRIVING",
+        });
+        expect(prisma.ride.findFirst).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    driverId: "driver-uuid",
+                    status: {
+                        in: ["DRIVER_ASSIGNED", "DRIVER_ARRIVING", "DRIVER_ARRIVED", "IN_PROGRESS"],
+                    },
+                }),
+            }),
+        );
+    });
+
+    it("returns null if driver has no active ride", async () => {
+        const prisma = buildPrismaStub();
+        (prisma.driver.findUnique as jest.Mock).mockResolvedValue({ id: "driver-uuid" });
+        (prisma.ride.findFirst as jest.Mock).mockResolvedValue(null);
+
+        const service = await buildService(prisma);
+        const result = await service.getDriverCurrentRide("driver-user-uuid");
+
+        expect(result).toBeNull();
+    });
+
+    it("throws NotFoundException if driver profile is missing", async () => {
+        const prisma = buildPrismaStub();
+        (prisma.driver.findUnique as jest.Mock).mockResolvedValue(null);
+
+        const service = await buildService(prisma);
+        await expect(service.getDriverCurrentRide("unknown-user")).rejects.toThrow(NotFoundException);
+    });
+});
+
+describe("RidesService — updateStatus (Batch 5 Lifecycle & Completion)", () => {
+    it("transitions DRIVER_ASSIGNED -> DRIVER_ARRIVING and emits ride.updated", async () => {
+        const prisma = buildPrismaStub();
+        const gateway = buildGatewayStub();
+        (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            status: "DRIVER_ASSIGNED",
+            riderId: "rider-uuid",
+            driverId: "driver-uuid",
+            driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "BUSY" },
+        });
+        (prisma.ride.update as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            status: "DRIVER_ARRIVING",
+            riderId: "rider-uuid",
+            driverId: "driver-uuid",
+        });
+
+        const service = await buildService(prisma, gateway);
+        const updated = await service.updateStatus("ride-1", "driver-user-uuid", "DRIVER_ARRIVING");
+
+        expect(updated.status).toBe("DRIVER_ARRIVING");
+        expect(gateway.emitRideUpdated).toHaveBeenCalledWith("rider-uuid", "driver-user-uuid", expect.anything());
+    });
+
+    it("transitions DRIVER_ARRIVING -> DRIVER_ARRIVED and emits ride.updated", async () => {
+        const prisma = buildPrismaStub();
+        const gateway = buildGatewayStub();
+        (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            status: "DRIVER_ARRIVING",
+            riderId: "rider-uuid",
+            driverId: "driver-uuid",
+            driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "BUSY" },
+        });
+        (prisma.ride.update as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            status: "DRIVER_ARRIVED",
+            riderId: "rider-uuid",
+            driverId: "driver-uuid",
+        });
+
+        const service = await buildService(prisma, gateway);
+        const updated = await service.updateStatus("ride-1", "driver-user-uuid", "DRIVER_ARRIVED");
+
+        expect(updated.status).toBe("DRIVER_ARRIVED");
+        expect(gateway.emitRideUpdated).toHaveBeenCalledWith("rider-uuid", "driver-user-uuid", expect.anything());
+    });
+
+    it("transitions DRIVER_ARRIVED -> IN_PROGRESS for assigned driver", async () => {
+        const prisma = buildPrismaStub();
+        const gateway = buildGatewayStub();
+        (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            status: "DRIVER_ARRIVED",
+            riderId: "rider-uuid",
+            driverId: "driver-uuid",
+            driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "BUSY" },
+        });
+        (prisma.ride.update as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            status: "IN_PROGRESS",
+            riderId: "rider-uuid",
+            driverId: "driver-uuid",
+        });
+
+        const service = await buildService(prisma, gateway);
+        const updated = await service.updateStatus("ride-1", "driver-user-uuid", "IN_PROGRESS");
+
+        expect(updated.status).toBe("IN_PROGRESS");
+    });
+
+    it("atomically completes ride and sets driver to AVAILABLE on COMPLETED", async () => {
+        const prisma = buildPrismaStub();
+        const gateway = buildGatewayStub();
+
+        (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            status: "IN_PROGRESS",
+            riderId: "rider-uuid",
+            driverId: "driver-uuid",
+            driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "BUSY" },
+        });
+
+        (prisma.$transaction as jest.Mock).mockImplementation(async (cb) => {
+            const tx = {
+                ride: {
+                    update: jest.fn().mockResolvedValue({
+                        id: "ride-1",
+                        status: "COMPLETED",
+                        riderId: "rider-uuid",
+                        driverId: "driver-uuid",
+                    }),
+                },
+                driver: {
+                    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+                },
+            };
+            return cb(tx);
+        });
+
+        const service = await buildService(prisma, gateway);
+        const updated = await service.updateStatus("ride-1", "driver-user-uuid", "COMPLETED");
+
+        expect(updated.status).toBe("COMPLETED");
+        expect(gateway.emitRideUpdated).toHaveBeenCalledWith("rider-uuid", "driver-user-uuid", expect.anything());
+    });
+
+    it("rejects transition attempt by an unassigned driver", async () => {
+        const prisma = buildPrismaStub();
+        (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            status: "DRIVER_ASSIGNED",
+            riderId: "rider-uuid",
+            driverId: "driver-uuid",
+            driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "BUSY" },
+        });
+
+        const service = await buildService(prisma);
+        await expect(
+            service.updateStatus("ride-1", "other-driver-user-uuid", "DRIVER_ARRIVING"),
+        ).rejects.toThrow();
+    });
+});

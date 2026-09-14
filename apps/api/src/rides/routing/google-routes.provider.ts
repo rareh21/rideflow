@@ -175,7 +175,46 @@ export class GoogleRoutesProvider implements RoutingProvider {
             );
         }
 
-        // Strategy 3: Calculated Road Fallback
+        // Strategy 3: Try OSRM Free Routing API (Real road distance, duration & polyline)
+        try {
+            const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}?overview=full&geometries=polyline`;
+            const response = await fetch(osrmUrl);
+
+            if (response.ok) {
+                const data = (await response.json()) as {
+                    code?: string;
+                    routes?: Array<{
+                        distance?: number;
+                        duration?: number;
+                        geometry?: string;
+                    }>;
+                };
+
+                if (data?.code === "Ok" && data?.routes && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    if (
+                        typeof route.distance === "number" &&
+                        typeof route.duration === "number"
+                    ) {
+                        return {
+                            distanceKm:
+                                Math.max(0.1, Math.round((route.distance / 1000) * 10) / 10),
+                            durationMinutes: Math.max(
+                                1,
+                                Math.ceil(route.duration / 60),
+                            ),
+                            encodedPolyline: route.geometry,
+                        };
+                    }
+                }
+            }
+        } catch (err) {
+            this.logger.warn(
+                `OSRM Routing API error: ${err instanceof Error ? err.message : String(err)}. Using fallback road calculation.`,
+            );
+        }
+
+        // Strategy 4: Calculated Road Fallback
         return this.getFallbackRoute(origin, destination);
     }
 

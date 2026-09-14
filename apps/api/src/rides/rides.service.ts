@@ -517,6 +517,7 @@ export class RidesService {
         if (isAssignedDriver) {
             const driverStatuses: RideStatus[] = [
                 RideStatus.DRIVER_ARRIVING,
+                RideStatus.DRIVER_ARRIVED,
                 RideStatus.IN_PROGRESS,
                 RideStatus.COMPLETED,
                 RideStatus.CANCELLED,
@@ -978,5 +979,66 @@ export class RidesService {
             accepted: true,
             ride: acceptedRide,
         };
+    }
+
+    async getDriverCurrentRide(userId: string) {
+        const driver = await this.prisma.driver.findUnique({
+            where: { userId },
+            select: { id: true },
+        });
+
+        if (!driver) {
+            throw new NotFoundException("Driver profile not found");
+        }
+
+        const currentRide = await this.prisma.ride.findFirst({
+            where: {
+                driverId: driver.id,
+                status: {
+                    in: [
+                        RideStatus.DRIVER_ASSIGNED,
+                        RideStatus.DRIVER_ARRIVING,
+                        RideStatus.DRIVER_ARRIVED,
+                        RideStatus.IN_PROGRESS,
+                    ],
+                },
+            },
+            orderBy: {
+                createdAt: "desc",
+            },
+            include: {
+                pickupLocation: true,
+                destinationLocation: true,
+                rider: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                    },
+                },
+                driver: {
+                    select: {
+                        id: true,
+                        status: true,
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                            },
+                        },
+                        vehicle: {
+                            select: {
+                                make: true,
+                                model: true,
+                                year: true,
+                                plateNumber: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        return currentRide ?? null;
     }
 }

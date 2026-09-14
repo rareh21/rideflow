@@ -105,6 +105,16 @@ export class RidesController {
         );
     }
 
+    @Get("driver/current")
+    @Roles(UserRole.DRIVER)
+    getDriverCurrentRide(
+        @CurrentUser() user: AuthUser,
+    ) {
+        return this.ridesService.getDriverCurrentRide(
+            user.userId,
+        );
+    }
+
     @Get(":id")
     @Roles(
         UserRole.RIDER,

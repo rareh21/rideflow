@@ -32,11 +32,17 @@ const ACTIONS: Partial<Record<RideStatus, {
 }>> = {
     DRIVER_ASSIGNED: {
         next: "DRIVER_ARRIVING",
-        label: "I've arrived",
-        loadingLabel: "Updating arrival...",
+        label: "On my way",
+        loadingLabel: "Updating status...",
         icon: Car,
     },
     DRIVER_ARRIVING: {
+        next: "DRIVER_ARRIVED",
+        label: "I've arrived",
+        loadingLabel: "Updating arrival...",
+        icon: MapPin,
+    },
+    DRIVER_ARRIVED: {
         next: "IN_PROGRESS",
         label: "Start ride",
         loadingLabel: "Starting ride...",
@@ -234,7 +240,8 @@ function RideSummary({ status }: { status: RideStatus }) {
 
 function canDriverCancel(status: RideStatus) {
     return status === "DRIVER_ASSIGNED" ||
-        status === "DRIVER_ARRIVING";
+        status === "DRIVER_ARRIVING" ||
+        status === "DRIVER_ARRIVED";
 }
 
 function StatusBadge({ status }: { status: RideStatus }) {
@@ -248,6 +255,7 @@ const STATUS_CONFIG: Record<RideStatus, { label: string; icon: typeof Clock3; cl
     SEARCHING_DRIVER: { label: "Finding driver", icon: Loader2, className: "bg-blue-50 text-blue-700" },
     DRIVER_ASSIGNED: { label: "Assigned", icon: Car, className: "bg-[var(--rf-green)]/10 text-[var(--rf-green-dark)]" },
     DRIVER_ARRIVING: { label: "Arriving", icon: Car, className: "bg-[var(--rf-green)]/10 text-[var(--rf-green-dark)]" },
+    DRIVER_ARRIVED: { label: "Arrived", icon: MapPin, className: "bg-[var(--rf-green)]/10 text-[var(--rf-green-dark)]" },
     IN_PROGRESS: { label: "In progress", icon: PlayCircle, className: "bg-[var(--rf-green)]/10 text-[var(--rf-green-dark)]" },
     COMPLETED: { label: "Completed", icon: CheckCircle2, className: "bg-gray-100 text-gray-700" },
     CANCELLED: { label: "Cancelled", icon: XCircle, className: "bg-red-50 text-red-700" },

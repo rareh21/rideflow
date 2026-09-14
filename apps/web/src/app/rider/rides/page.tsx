@@ -55,6 +55,13 @@ const STATUS_CONFIG: Record<
             "bg-[var(--rf-green)]/10 text-[var(--rf-green-dark)]",
     },
 
+    DRIVER_ARRIVED: {
+        label: "Driver arrived",
+        icon: MapPin,
+        className:
+            "bg-[var(--rf-green)]/10 text-[var(--rf-green-dark)]",
+    },
+
     IN_PROGRESS: {
         label: "Ride in progress",
         icon: Car,

@@ -158,44 +158,63 @@ export function RouteMap({ pickup, destination, encodedPolyline }: RouteMapProps
 
         // Resolve Polyline Points
         let routePoints: [number, number][] = [];
+        let isEncoded = false;
         if (encodedPolyline && encodedPolyline.trim() !== "") {
             try {
                 routePoints = decodePolyline(encodedPolyline);
+                if (routePoints.length > 0) {
+                    isEncoded = true;
+                }
             } catch {
-                routePoints = [
-                    [pLat, pLng],
-                    [dLat, dLng],
-                ];
+                routePoints = [];
             }
-        } else {
+        }
+
+        if (!isEncoded) {
             routePoints = [
                 [pLat, pLng],
                 [dLat, dLng],
             ];
         }
 
-        if (routePoints.length > 0) {
-            (
-                L.polyline as (
-                    points: [number, number][],
-                    opts: unknown,
-                ) => { addTo: (m: unknown) => void }
-            )(routePoints, {
-                color: "#00D166",
-                weight: 5,
-                opacity: 0.85,
-                lineCap: "round",
-                lineJoin: "round",
-            }).addTo(map);
+        const polylineLayer = (
+            L.polyline as (
+                points: [number, number][],
+                opts: unknown,
+            ) => { addTo: (m: unknown) => void }
+        )(routePoints, {
+            color: "#00D166",
+            weight: 5,
+            opacity: 0.85,
+            lineCap: "round",
+            lineJoin: "round",
+        });
+        (polylineLayer as unknown as { addTo: (m: unknown) => void }).addTo(map);
+
+        // Asynchronously fetch OSRM road polyline if no encoded polyline was provided by server
+        if (!isEncoded) {
+            const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${pLng},${pLat};${dLng},${dLat}?overview=full&geometries=polyline`;
+            fetch(osrmUrl)
+                .then((res) => res.json())
+                .then((data: { code?: string; routes?: Array<{ geometry?: string }> }) => {
+                    if (data?.code === "Ok" && data?.routes?.[0]?.geometry) {
+                        const pts = decodePolyline(data.routes[0].geometry);
+                        if (pts.length > 0) {
+                            (polylineLayer as unknown as { setLatLngs: (p: [number, number][]) => void }).setLatLngs(pts);
+                            const newBounds = (L.latLngBounds as (p: [number, number][]) => unknown)(pts);
+                            (map as { fitBounds: (b: unknown, opts: { padding: [number, number] }) => void }).fitBounds(newBounds, { padding: [50, 50] });
+                        }
+                    }
+                })
+                .catch(() => {
+                    // Keep straight line fallback if offline
+                });
         }
 
         // Fit Bounds
         const bounds = (
             L.latLngBounds as (points: [number, number][]) => unknown
-        )([
-            [pLat, pLng],
-            [dLat, dLng],
-        ]);
+        )(routePoints);
         (
             map as {
                 fitBounds: (

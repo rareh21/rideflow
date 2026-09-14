@@ -24,6 +24,7 @@ import {
 import { subscribeToRideUpdates } from "@/lib/ride-realtime";
 
 import { Button } from "@/components/ui/button";
+import { RouteMap } from "@/components/route-map";
 
 export default function RideDetailsPage() {
     const params = useParams<{
@@ -167,12 +168,10 @@ export default function RideDetailsPage() {
     }
 
     const canCancel =
-        ride.status ===
-        "SEARCHING_DRIVER" ||
-        ride.status ===
-        "DRIVER_ASSIGNED" ||
-        ride.status ===
-        "DRIVER_ARRIVING";
+        ride.status === "SEARCHING_DRIVER" ||
+        ride.status === "DRIVER_ASSIGNED" ||
+        ride.status === "DRIVER_ARRIVING" ||
+        ride.status === "DRIVER_ARRIVED";
 
     return (
         <main className="min-h-full bg-[var(--rf-surface-muted)]">
@@ -201,6 +200,16 @@ export default function RideDetailsPage() {
                     />
                 </div>
 
+                {ride.status === "DRIVER_ARRIVED" && (
+                    <div className="mt-5 flex items-center gap-3 rounded-2xl bg-[var(--rf-green)]/15 p-4 border border-[var(--rf-green)]">
+                        <MapPin size={22} className="text-[var(--rf-green-dark)] shrink-0" />
+                        <div>
+                            <p className="text-sm font-bold text-[var(--rf-midnight)]">Your driver has arrived!</p>
+                            <p className="text-xs text-[var(--rf-muted)]">Please meet your driver at the pickup location.</p>
+                        </div>
+                    </div>
+                )}
+
                 {error && (
                     <div className="mt-5 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
                         <AlertCircle
@@ -213,6 +222,14 @@ export default function RideDetailsPage() {
                         </p>
                     </div>
                 )}
+
+                {/* Interactive Route Map */}
+                <div className="mt-5 h-56 w-full overflow-hidden rounded-3xl border border-[var(--rf-border)] shadow-sm">
+                    <RouteMap
+                        pickup={ride.pickupLocation}
+                        destination={ride.destinationLocation}
+                    />
+                </div>
 
                 <section className="mt-6 rounded-3xl border border-[var(--rf-border)] bg-[var(--rf-surface)] p-6 shadow-sm sm:p-8">
                     <div className="space-y-4">
@@ -473,6 +490,13 @@ const STATUS_CONFIG: Record<
     DRIVER_ARRIVING: {
         label: "Driver arriving",
         icon: Car,
+        className:
+            "bg-[var(--rf-green)]/10 text-[var(--rf-green-dark)]",
+    },
+
+    DRIVER_ARRIVED: {
+        label: "Driver arrived",
+        icon: MapPin,
         className:
             "bg-[var(--rf-green)]/10 text-[var(--rf-green-dark)]",
     },

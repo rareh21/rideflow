@@ -5,6 +5,7 @@ export type RideStatus =
     | "SEARCHING_DRIVER"
     | "DRIVER_ASSIGNED"
     | "DRIVER_ARRIVING"
+    | "DRIVER_ARRIVED"
     | "IN_PROGRESS"
     | "COMPLETED"
     | "CANCELLED";
@@ -214,4 +215,8 @@ export async function acceptRide(
             method: "POST",
         },
     );
+}
+
+export async function getDriverCurrentRide() {
+    return api<Ride | null>("/rides/driver/current");
 }

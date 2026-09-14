@@ -13,10 +13,17 @@ const transitions: Record<RideStatus, RideStatus[]> = {
 
     DRIVER_ASSIGNED: [
         RideStatus.DRIVER_ARRIVING,
+        RideStatus.DRIVER_ARRIVED,
         RideStatus.CANCELLED,
     ],
 
     DRIVER_ARRIVING: [
+        RideStatus.DRIVER_ARRIVED,
+        RideStatus.IN_PROGRESS,
+        RideStatus.CANCELLED,
+    ],
+
+    DRIVER_ARRIVED: [
         RideStatus.IN_PROGRESS,
         RideStatus.CANCELLED,
     ],
