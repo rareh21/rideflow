@@ -18,8 +18,10 @@ import { useEffect, useState } from "react";
 import {
     cancelRide,
     getRide,
+    getRideReceipt,
     RideStatus,
     type Ride,
+    type RideReceiptData,
 } from "@/lib/rides";
 import { subscribeToRideUpdates } from "@/lib/ride-realtime";
 
@@ -36,6 +38,9 @@ export default function RideDetailsPage() {
 
     const [ride, setRide] =
         useState<Ride | null>(null);
+
+    const [receipt, setReceipt] =
+        useState<RideReceiptData | null>(null);
 
     const [loading, setLoading] =
         useState(true);
@@ -59,6 +64,15 @@ export default function RideDetailsPage() {
                 await getRide(rideId);
 
             setRide(data);
+
+            if (data.status === "COMPLETED") {
+                try {
+                    const receiptData = await getRideReceipt(rideId);
+                    setReceipt(receiptData);
+                } catch {
+                    // Fallback to ride object
+                }
+            }
         } catch (err) {
             setError(
                 err instanceof Error
@@ -80,6 +94,9 @@ export default function RideDetailsPage() {
         if (event.rideId === rideId) {
             setRide(event.ride);
             setError(null);
+            if (event.status === "COMPLETED") {
+                void getRideReceipt(rideId).then(setReceipt).catch(() => {});
+            }
         }
     }), [rideId]);
 
@@ -188,15 +205,15 @@ export default function RideDetailsPage() {
 
                     <div className="mt-6">
                         <RideReceipt
-                            rideId={ride.id}
-                            rideType={ride.rideType}
-                            pickupLocation={ride.pickupLocation}
-                            destinationLocation={ride.destinationLocation}
-                            distanceKm={ride.estimatedDistanceKm}
-                            durationMinutes={ride.estimatedDurationMinutes}
-                            fare={ride.estimatedFare}
-                            paymentMethod={ride.paymentMethod}
-                            completedAt={ride.completedAt ?? ride.updatedAt}
+                            rideId={receipt?.rideId ?? ride.id}
+                            rideType={receipt?.rideType ?? ride.rideType}
+                            pickupLocation={receipt?.pickupLocation ?? ride.pickupLocation}
+                            destinationLocation={receipt?.destinationLocation ?? ride.destinationLocation}
+                            distanceKm={receipt?.distanceKm ?? ride.estimatedDistanceKm}
+                            durationMinutes={receipt?.durationMinutes ?? ride.estimatedDurationMinutes}
+                            fare={receipt?.fare ?? ride.estimatedFare}
+                            paymentMethod={receipt?.paymentMethod ?? ride.paymentMethod}
+                            completedAt={receipt?.completedAt ?? ride.completedAt ?? ride.updatedAt}
                             actions={
                                 <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
                                     <Link

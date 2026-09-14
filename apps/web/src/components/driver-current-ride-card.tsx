@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-import { updateRideStatus, type Ride, type RideStatus } from "@/lib/rides";
+import { getRideReceipt, updateRideStatus, type Ride, type RideReceiptData, type RideStatus } from "@/lib/rides";
 import { determineVehicleType } from "@/lib/vehicles";
 import { RouteMap } from "@/components/route-map";
 import { RideReceipt } from "@/components/ride-receipt";
@@ -85,6 +85,7 @@ export function DriverCurrentRideCard({
     const [feedback, setFeedback] = useState<string | null>(null);
     const [showCompletionModal, setShowCompletionModal] = useState(false);
     const [completedSummary, setCompletedSummary] = useState<Ride | null>(null);
+    const [completedReceipt, setCompletedReceipt] = useState<RideReceiptData | null>(null);
 
     const vehicleTier = ride.driver?.vehicle
         ? determineVehicleType(ride.driver.vehicle.make, ride.driver.vehicle.model)
@@ -118,6 +119,12 @@ export function DriverCurrentRideCard({
                 setFeedback("Ride started. Have a safe trip!");
                 onUpdate?.(updated);
             } else if (nextStatus === "COMPLETED") {
+                try {
+                    const receiptData = await getRideReceipt(ride.id);
+                    setCompletedReceipt(receiptData);
+                } catch {
+                    // Fallback to ride object
+                }
                 setCompletedSummary(updated);
                 onUpdate?.(updated);
             } else if (nextStatus === "CANCELLED") {
@@ -143,20 +150,21 @@ export function DriverCurrentRideCard({
                     </p>
                 </div>
                 <RideReceipt
-                    rideId={completedSummary.id}
-                    rideType={completedSummary.rideType}
-                    pickupLocation={completedSummary.pickupLocation}
-                    destinationLocation={completedSummary.destinationLocation}
-                    distanceKm={completedSummary.estimatedDistanceKm}
-                    durationMinutes={completedSummary.estimatedDurationMinutes}
-                    fare={completedSummary.estimatedFare}
-                    paymentMethod={completedSummary.paymentMethod}
-                    completedAt={completedSummary.completedAt ?? completedSummary.updatedAt}
+                    rideId={completedReceipt?.rideId ?? completedSummary.id}
+                    rideType={completedReceipt?.rideType ?? completedSummary.rideType}
+                    pickupLocation={completedReceipt?.pickupLocation ?? completedSummary.pickupLocation}
+                    destinationLocation={completedReceipt?.destinationLocation ?? completedSummary.destinationLocation}
+                    distanceKm={completedReceipt?.distanceKm ?? completedSummary.estimatedDistanceKm}
+                    durationMinutes={completedReceipt?.durationMinutes ?? completedSummary.estimatedDurationMinutes}
+                    fare={completedReceipt?.fare ?? completedSummary.estimatedFare}
+                    paymentMethod={completedReceipt?.paymentMethod ?? completedSummary.paymentMethod}
+                    completedAt={completedReceipt?.completedAt ?? completedSummary.completedAt ?? completedSummary.updatedAt}
                     actions={
                         <button
                             type="button"
                             onClick={() => {
                                 setCompletedSummary(null);
+                                setCompletedReceipt(null);
                                 onCompleted?.();
                             }}
                             className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--rf-green)] px-5 text-sm font-bold text-[var(--rf-midnight)] transition hover:bg-[var(--rf-green-dark)]"
