@@ -77,6 +77,22 @@ function buildPrismaStub(
                 "rider" in opts ? opts.rider : RIDER_USER,
             ),
         },
+        driver: {
+            findUnique: jest.fn().mockImplementation(() =>
+                Promise.resolve(
+                    "driver" in opts
+                        ? opts.driver
+                        : {
+                              id: "driver-uuid",
+                              userId: "driver-user-uuid",
+                              status: "AVAILABLE",
+                              vehicle: { make: "Toyota", model: "Etios" },
+                          },
+                ),
+            ),
+            findFirst: jest.fn().mockResolvedValue(null),
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
         ride: {
             create: jest.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) =>
                 Promise.resolve({
@@ -86,7 +102,27 @@ function buildPrismaStub(
                     destinationLocation: DESTINATION_LOCATION,
                 }),
             ),
+            findUnique: jest.fn().mockResolvedValue(null),
+            findMany: jest.fn().mockResolvedValue([]),
+            findFirst: jest.fn().mockResolvedValue(null),
+            update: jest.fn().mockResolvedValue({}),
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         },
+        $transaction: jest.fn().mockImplementation(async (cb) => {
+            if (typeof cb === "function") {
+                return cb({
+                    ride: {
+                        update: jest.fn().mockResolvedValue({}),
+                        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+                        findUnique: jest.fn().mockResolvedValue(null),
+                    },
+                    driver: {
+                        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+                    },
+                });
+            }
+            return cb;
+        }),
     };
 }
 
@@ -749,3 +785,126 @@ describe("RidesService — updateStatus (Batch 5 Lifecycle & Completion)", () =>
         ).rejects.toThrow();
     });
 });
+
+// ── Batch 6: Post-Ride Completion & Receipt ───────────────────────────────
+describe("RidesService — getReceipt (Batch 6)", () => {
+    it("allows rider owner to retrieve completed ride receipt", async () => {
+        const prisma = buildPrismaStub();
+        const now = new Date();
+        (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            riderId: "rider-user-uuid",
+            driverId: "driver-uuid",
+            rideType: "GO",
+            status: "COMPLETED",
+            estimatedFare: "245.00",
+            estimatedDistanceKm: "14.80",
+            estimatedDurationMinutes: 32,
+            paymentMethod: "UPI",
+            pickupLocation: PICKUP_LOCATION,
+            destinationLocation: DESTINATION_LOCATION,
+            rider: { id: "rider-user-uuid", name: "Rider User", email: "rider@example.com" },
+            driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "AVAILABLE", user: { id: "driver-user-uuid", name: "Driver User" }, vehicle: null },
+            createdAt: now,
+            updatedAt: now,
+            completedAt: now,
+        });
+
+        const service = await buildService(prisma);
+        const receipt = await service.getReceipt("ride-1", "rider-user-uuid");
+
+        expect(receipt).toMatchObject({
+            rideId: "ride-1",
+            status: "COMPLETED",
+            rideType: "GO",
+            distanceKm: 14.8,
+            durationMinutes: 32,
+            fare: 245,
+            currency: "INR",
+            paymentMethod: "UPI",
+        });
+        expect(receipt.pickupLocation).toEqual(PICKUP_LOCATION);
+        expect(receipt.destinationLocation).toEqual(DESTINATION_LOCATION);
+    });
+
+    it("allows assigned driver to retrieve completed ride receipt", async () => {
+        const prisma = buildPrismaStub();
+        const now = new Date();
+        (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            riderId: "rider-user-uuid",
+            driverId: "driver-uuid",
+            rideType: "PLUS",
+            status: "COMPLETED",
+            estimatedFare: "350.00",
+            estimatedDistanceKm: "20.00",
+            estimatedDurationMinutes: 40,
+            paymentMethod: "CARD",
+            pickupLocation: PICKUP_LOCATION,
+            destinationLocation: DESTINATION_LOCATION,
+            rider: { id: "rider-user-uuid", name: "Rider User", email: "rider@example.com" },
+            driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "AVAILABLE", user: { id: "driver-user-uuid", name: "Driver User" }, vehicle: null },
+            createdAt: now,
+            updatedAt: now,
+            completedAt: now,
+        });
+
+        const service = await buildService(prisma);
+        const receipt = await service.getReceipt("ride-1", "driver-user-uuid");
+
+        expect(receipt.rideId).toBe("ride-1");
+        expect(receipt.fare).toBe(350);
+        expect(receipt.paymentMethod).toBe("CARD");
+    });
+
+    it("rejects unrelated rider with ForbiddenException", async () => {
+        const prisma = buildPrismaStub();
+        (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            riderId: "rider-user-uuid",
+            driverId: "driver-uuid",
+            driver: { id: "driver-uuid", userId: "driver-user-uuid" },
+        });
+
+        const service = await buildService(prisma);
+        await expect(service.getReceipt("ride-1", "other-rider-uuid")).rejects.toThrow("You do not have access to this ride");
+    });
+
+    it("rejects unrelated driver with ForbiddenException", async () => {
+        const prisma = buildPrismaStub();
+        (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            riderId: "rider-user-uuid",
+            driverId: "driver-uuid",
+            driver: { id: "driver-uuid", userId: "driver-user-uuid" },
+        });
+
+        const service = await buildService(prisma);
+        await expect(service.getReceipt("ride-1", "other-driver-user-uuid")).rejects.toThrow("You do not have access to this ride");
+    });
+
+    it("defaults payment method to UPI if none is specified", async () => {
+        const prisma = buildPrismaStub();
+        (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            riderId: "rider-user-uuid",
+            driverId: "driver-uuid",
+            rideType: "GO",
+            status: "COMPLETED",
+            estimatedFare: "100.00",
+            estimatedDistanceKm: "5.00",
+            estimatedDurationMinutes: 15,
+            paymentMethod: null,
+            pickupLocation: PICKUP_LOCATION,
+            destinationLocation: DESTINATION_LOCATION,
+            rider: { id: "rider-user-uuid" },
+            driver: { id: "driver-uuid", userId: "driver-user-uuid" },
+        });
+
+        const service = await buildService(prisma);
+        const receipt = await service.getReceipt("ride-1", "rider-user-uuid");
+
+        expect(receipt.paymentMethod).toBe("UPI");
+    });
+});
+

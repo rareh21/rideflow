@@ -308,7 +308,7 @@ function RideCard({
             <div className="mt-5 flex items-center justify-between border-t border-[var(--rf-border)] pt-4">
                 <div>
                     <p className="text-xs text-[var(--rf-muted)]">
-                        Estimated fare
+                        {ride.status === "COMPLETED" ? "Fare" : "Estimated fare"}
                     </p>
 
                     <p className="mt-1 font-bold text-[var(--rf-midnight)]">

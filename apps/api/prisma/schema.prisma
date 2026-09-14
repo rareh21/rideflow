@@ -143,6 +143,7 @@ model Ride {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  completedAt DateTime?
 
   @@index([riderId])
   @@index([driverId])

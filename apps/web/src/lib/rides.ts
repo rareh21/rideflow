@@ -77,6 +77,7 @@ export type Ride = {
 
     createdAt: string;
     updatedAt: string;
+    completedAt?: string | null;
 };
 
 /**
@@ -219,4 +220,22 @@ export async function acceptRide(
 
 export async function getDriverCurrentRide() {
     return api<Ride | null>("/rides/driver/current");
+}
+
+export type RideReceiptData = {
+    rideId: string;
+    status: RideStatus;
+    rideType: RideType;
+    pickupLocation: RideLocation;
+    destinationLocation: RideLocation;
+    distanceKm: number;
+    durationMinutes: number;
+    fare: number;
+    currency: "INR";
+    paymentMethod: PaymentMethod;
+    completedAt: string | null;
+};
+
+export async function getRideReceipt(rideId: string) {
+    return api<RideReceiptData>(`/rides/${rideId}/receipt`);
 }

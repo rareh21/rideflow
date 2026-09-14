@@ -366,6 +366,27 @@ export class RidesService {
         return ride;
     }
 
+    async getReceipt(
+        rideId: string,
+        userId: string,
+    ) {
+        const ride = await this.findById(rideId, userId);
+
+        return {
+            rideId: ride.id,
+            status: ride.status,
+            rideType: ride.rideType,
+            pickupLocation: ride.pickupLocation,
+            destinationLocation: ride.destinationLocation,
+            distanceKm: Number(ride.estimatedDistanceKm),
+            durationMinutes: ride.estimatedDurationMinutes,
+            fare: Number(ride.estimatedFare),
+            currency: "INR" as const,
+            paymentMethod: ride.paymentMethod ?? "UPI",
+            completedAt: ride.completedAt ?? (ride.status === RideStatus.COMPLETED ? ride.updatedAt : null),
+        };
+    }
+
     async getMyRides(
         riderId: string,
     ) {
@@ -562,6 +583,7 @@ export class RidesService {
                             },
                             data: {
                                 status: nextStatus,
+                                ...(nextStatus === RideStatus.COMPLETED ? { completedAt: ride.completedAt ?? new Date() } : {}),
                             },
                             include: {
                                 pickupLocation: true,

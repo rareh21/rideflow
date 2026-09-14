@@ -23,6 +23,7 @@ import {
 } from "@/lib/rides";
 import { subscribeToRideUpdates } from "@/lib/ride-realtime";
 import { Button } from "@/components/ui/button";
+import { RideReceipt } from "@/components/ride-receipt";
 
 const ACTIONS: Partial<Record<RideStatus, {
     next: RideStatus;
@@ -153,6 +154,39 @@ export default function DriverRideDetailsPage() {
 
     const action = ACTIONS[ride.status];
     const ActionIcon = action?.icon;
+
+    if (ride.status === "COMPLETED") {
+        return (
+            <main className="min-h-full bg-[var(--rf-surface-muted)]">
+                <div className="mx-auto max-w-3xl px-4 py-8 pb-28 sm:px-6 lg:py-10 lg:pb-10">
+                    <BackLink />
+                    <div className="mt-6">
+                        <RideReceipt
+                            rideId={ride.id}
+                            rideType={ride.rideType}
+                            pickupLocation={ride.pickupLocation}
+                            destinationLocation={ride.destinationLocation}
+                            distanceKm={ride.estimatedDistanceKm}
+                            durationMinutes={ride.estimatedDurationMinutes}
+                            fare={ride.estimatedFare}
+                            paymentMethod={ride.paymentMethod}
+                            completedAt={ride.completedAt ?? ride.updatedAt}
+                            actions={
+                                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                                    <Link
+                                        href="/driver/rides"
+                                        className="flex min-h-11 items-center justify-center rounded-2xl bg-[var(--rf-green)] px-5 text-sm font-bold text-[var(--rf-midnight)] transition hover:bg-[var(--rf-green-dark)]"
+                                    >
+                                        Back to Ride History
+                                    </Link>
+                                </div>
+                            }
+                        />
+                    </div>
+                </div>
+            </main>
+        );
+    }
 
     return (
         <main className="min-h-full bg-[var(--rf-surface-muted)]">

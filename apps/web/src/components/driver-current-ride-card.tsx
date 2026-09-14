@@ -17,6 +17,7 @@ import { useState } from "react";
 import { updateRideStatus, type Ride, type RideStatus } from "@/lib/rides";
 import { determineVehicleType } from "@/lib/vehicles";
 import { RouteMap } from "@/components/route-map";
+import { RideReceipt } from "@/components/ride-receipt";
 
 const STATUS_CONFIG: Record<
     RideStatus,
@@ -83,6 +84,7 @@ export function DriverCurrentRideCard({
     const [error, setError] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<string | null>(null);
     const [showCompletionModal, setShowCompletionModal] = useState(false);
+    const [completedSummary, setCompletedSummary] = useState<Ride | null>(null);
 
     const vehicleTier = ride.driver?.vehicle
         ? determineVehicleType(ride.driver.vehicle.make, ride.driver.vehicle.model)
@@ -108,19 +110,20 @@ export function DriverCurrentRideCard({
 
             if (nextStatus === "DRIVER_ARRIVING") {
                 setFeedback("Rider has been notified that you are on the way.");
+                onUpdate?.(updated);
             } else if (nextStatus === "DRIVER_ARRIVED") {
                 setFeedback("Rider has been notified of your arrival!");
+                onUpdate?.(updated);
             } else if (nextStatus === "IN_PROGRESS") {
                 setFeedback("Ride started. Have a safe trip!");
+                onUpdate?.(updated);
             } else if (nextStatus === "COMPLETED") {
-                setFeedback("Ride completed. Your availability has been restored.");
-                onCompleted?.();
+                setCompletedSummary(updated);
+                onUpdate?.(updated);
             } else if (nextStatus === "CANCELLED") {
                 setFeedback("Ride cancelled.");
                 onCompleted?.();
             }
-
-            onUpdate?.(updated);
         } catch (err) {
             setError(
                 err instanceof Error ? err.message : "Unable to update ride status.",
@@ -129,6 +132,41 @@ export function DriverCurrentRideCard({
             setUpdating(false);
             setShowCompletionModal(false);
         }
+    }
+
+    if (completedSummary) {
+        return (
+            <div className="space-y-4">
+                <div className="rounded-2xl bg-[var(--rf-green)]/15 p-4 border border-[var(--rf-green)] text-center">
+                    <p className="text-sm font-bold text-[var(--rf-midnight)]">
+                        You&apos;re now available for new rides.
+                    </p>
+                </div>
+                <RideReceipt
+                    rideId={completedSummary.id}
+                    rideType={completedSummary.rideType}
+                    pickupLocation={completedSummary.pickupLocation}
+                    destinationLocation={completedSummary.destinationLocation}
+                    distanceKm={completedSummary.estimatedDistanceKm}
+                    durationMinutes={completedSummary.estimatedDurationMinutes}
+                    fare={completedSummary.estimatedFare}
+                    paymentMethod={completedSummary.paymentMethod}
+                    completedAt={completedSummary.completedAt ?? completedSummary.updatedAt}
+                    actions={
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setCompletedSummary(null);
+                                onCompleted?.();
+                            }}
+                            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--rf-green)] px-5 text-sm font-bold text-[var(--rf-midnight)] transition hover:bg-[var(--rf-green-dark)]"
+                        >
+                            Done & Return to Dashboard
+                        </button>
+                    }
+                />
+            </div>
+        );
     }
 
     return (

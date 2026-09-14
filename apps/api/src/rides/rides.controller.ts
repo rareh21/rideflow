@@ -115,6 +115,21 @@ export class RidesController {
         );
     }
 
+    @Get(":id/receipt")
+    @Roles(
+        UserRole.RIDER,
+        UserRole.DRIVER,
+    )
+    getReceipt(
+        @Param("id") rideId: string,
+        @CurrentUser() user: AuthUser,
+    ) {
+        return this.ridesService.getReceipt(
+            rideId,
+            user.userId,
+        );
+    }
+
     @Get(":id")
     @Roles(
         UserRole.RIDER,
