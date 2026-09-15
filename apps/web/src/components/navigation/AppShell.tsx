@@ -24,7 +24,9 @@ export function AppShell({
     const { user, loading } = useAuth();
     const { hasPermission } = useAuthorization();
 
-    const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
+    const isPublicRoute = PUBLIC_ROUTES.some(
+        (route) => pathname === route || pathname.startsWith(`${route}/`),
+    );
 
     useEffect(() => {
         if (!loading && !user && !isPublicRoute) {
