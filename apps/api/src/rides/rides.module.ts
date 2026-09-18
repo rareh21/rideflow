@@ -18,5 +18,6 @@ import { GoogleRoutesProvider } from "./routing/google-routes.provider";
         RoutingService,
         GoogleRoutesProvider,
     ],
+    exports: [RidesGateway, RidesService],
 })
 export class RidesModule { }

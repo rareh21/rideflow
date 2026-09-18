@@ -145,4 +145,30 @@ export class RidesGateway
         this.server.to("drivers").emit("ride.request.removed", { rideId });
         this.server.to("drivers").emit("ride.requests.changed", { rideId });
     }
+
+    emitDriverLocationUpdated(
+        riderUserId: string,
+        driverUserId: string,
+        payload: {
+            rideId: string;
+            driverId: string;
+            location: {
+                latitude: number;
+                longitude: number;
+                heading: number | null;
+                speedKmh: number | null;
+                accuracyM: number | null;
+                updatedAt: string;
+            };
+        },
+    ) {
+        const userIds = Array.from(
+            new Set([riderUserId, driverUserId].filter(Boolean)),
+        );
+        this.emitToUsers(
+            userIds,
+            "driver.location.updated",
+            payload,
+        );
+    }
 }

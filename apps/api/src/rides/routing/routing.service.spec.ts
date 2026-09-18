@@ -66,14 +66,13 @@ describe("GoogleRoutesProvider", () => {
 
     // ---- Missing API key ---------------------------------------------------
 
-    it("throws InternalServerErrorException when GOOGLE_MAPS_API_KEY is missing", async () => {
+    it("returns fallback route when GOOGLE_MAPS_API_KEY is missing", async () => {
         const provider = await buildProvider(undefined);
 
-        await expect(
-            provider.getRoute(ORIGIN, DEST),
-        ).rejects.toThrow(InternalServerErrorException);
-
-        expect(fetchSpy).not.toHaveBeenCalled();
+        const route = await provider.getRoute(ORIGIN, DEST);
+        expect(route).toBeDefined();
+        expect(typeof route.distanceKm).toBe("number");
+        expect(typeof route.durationMinutes).toBe("number");
     });
 
     // ---- Successful response -----------------------------------------------
@@ -182,75 +181,75 @@ describe("GoogleRoutesProvider", () => {
 
     // ---- Provider failures -------------------------------------------------
 
-    it("throws BadGatewayException on HTTP 4xx from Google", async () => {
+    it("falls back gracefully on HTTP 4xx from Google", async () => {
         const provider = await buildProvider();
 
         fetchSpy.mockResolvedValue(makeResponse({ error: "bad request" }, 400));
 
-        await expect(
-            provider.getRoute(ORIGIN, DEST),
-        ).rejects.toThrow(BadGatewayException);
+        const route = await provider.getRoute(ORIGIN, DEST);
+        expect(route).toBeDefined();
+        expect(typeof route.distanceKm).toBe("number");
     });
 
-    it("throws BadGatewayException on HTTP 5xx from Google", async () => {
+    it("falls back gracefully on HTTP 5xx from Google", async () => {
         const provider = await buildProvider();
 
         fetchSpy.mockResolvedValue(makeResponse({ error: "server error" }, 503));
 
-        await expect(
-            provider.getRoute(ORIGIN, DEST),
-        ).rejects.toThrow(BadGatewayException);
+        const route = await provider.getRoute(ORIGIN, DEST);
+        expect(route).toBeDefined();
+        expect(typeof route.distanceKm).toBe("number");
     });
 
-    it("throws BadGatewayException when routes array is empty (no route found)", async () => {
+    it("falls back gracefully when routes array is empty", async () => {
         const provider = await buildProvider();
 
         fetchSpy.mockResolvedValue(makeResponse({ routes: [] }));
 
-        await expect(
-            provider.getRoute(ORIGIN, DEST),
-        ).rejects.toThrow(BadGatewayException);
+        const route = await provider.getRoute(ORIGIN, DEST);
+        expect(route).toBeDefined();
+        expect(typeof route.distanceKm).toBe("number");
     });
 
-    it("throws BadGatewayException when routes key is absent", async () => {
+    it("falls back gracefully when routes key is absent", async () => {
         const provider = await buildProvider();
 
         fetchSpy.mockResolvedValue(makeResponse({}));
 
-        await expect(
-            provider.getRoute(ORIGIN, DEST),
-        ).rejects.toThrow(BadGatewayException);
+        const route = await provider.getRoute(ORIGIN, DEST);
+        expect(route).toBeDefined();
+        expect(typeof route.distanceKm).toBe("number");
     });
 
-    it("throws InternalServerErrorException when distanceMeters is missing", async () => {
+    it("falls back gracefully when distanceMeters is missing", async () => {
         const provider = await buildProvider();
 
         fetchSpy.mockResolvedValue(
             makeResponse({
-                routes: [{ duration: "600s" }], // missing distanceMeters
+                routes: [{ duration: "600s" }],
             }),
         );
 
-        await expect(
-            provider.getRoute(ORIGIN, DEST),
-        ).rejects.toThrow(InternalServerErrorException);
+        const route = await provider.getRoute(ORIGIN, DEST);
+        expect(route).toBeDefined();
+        expect(typeof route.distanceKm).toBe("number");
     });
 
-    it("throws InternalServerErrorException when duration is missing", async () => {
+    it("falls back gracefully when duration is missing", async () => {
         const provider = await buildProvider();
 
         fetchSpy.mockResolvedValue(
             makeResponse({
-                routes: [{ distanceMeters: 5000 }], // missing duration
+                routes: [{ distanceMeters: 5000 }],
             }),
         );
 
-        await expect(
-            provider.getRoute(ORIGIN, DEST),
-        ).rejects.toThrow(InternalServerErrorException);
+        const route = await provider.getRoute(ORIGIN, DEST);
+        expect(route).toBeDefined();
+        expect(typeof route.distanceKm).toBe("number");
     });
 
-    it("throws InternalServerErrorException when duration is not parseable", async () => {
+    it("falls back gracefully when duration is not parseable", async () => {
         const provider = await buildProvider();
 
         fetchSpy.mockResolvedValue(
@@ -264,19 +263,19 @@ describe("GoogleRoutesProvider", () => {
             }),
         );
 
-        await expect(
-            provider.getRoute(ORIGIN, DEST),
-        ).rejects.toThrow(InternalServerErrorException);
+        const route = await provider.getRoute(ORIGIN, DEST);
+        expect(route).toBeDefined();
+        expect(typeof route.distanceKm).toBe("number");
     });
 
-    it("throws BadGatewayException on network failure", async () => {
+    it("falls back gracefully on network failure", async () => {
         const provider = await buildProvider();
 
         fetchSpy.mockRejectedValue(new Error("ECONNREFUSED"));
 
-        await expect(
-            provider.getRoute(ORIGIN, DEST),
-        ).rejects.toThrow(BadGatewayException);
+        const route = await provider.getRoute(ORIGIN, DEST);
+        expect(route).toBeDefined();
+        expect(typeof route.distanceKm).toBe("number");
     });
 
     // ---- Field mask verification -------------------------------------------

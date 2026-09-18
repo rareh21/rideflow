@@ -27,6 +27,8 @@ import { subscribeToRideUpdates } from "@/lib/ride-realtime";
 
 import { Button } from "@/components/ui/button";
 import { RouteMap } from "@/components/route-map";
+import { LiveTrackingMap } from "@/components/live-tracking-map";
+import { useDriverTracking } from "@/hooks/use-driver-tracking";
 import { RideReceipt } from "@/components/ride-receipt";
 import { RideReviewSection } from "@/components/ride-review-section";
 
@@ -64,6 +66,17 @@ export default function RideDetailsPage() {
 
     const [error, setError] =
         useState<string | null>(null);
+
+    const isTrackingActive =
+        ride?.status === "DRIVER_ASSIGNED" ||
+        ride?.status === "DRIVER_ARRIVING" ||
+        ride?.status === "DRIVER_ARRIVED" ||
+        ride?.status === "IN_PROGRESS";
+
+    const tracking = useDriverTracking({
+        rideId,
+        enabled: isTrackingActive,
+    });
 
     async function loadPayment(id: string) {
         try {
@@ -351,13 +364,58 @@ export default function RideDetailsPage() {
                     </div>
                 )}
 
-                {/* Interactive Route Map */}
-                <div className="mt-5 h-56 w-full overflow-hidden rounded-3xl border border-[var(--rf-border)] shadow-sm">
-                    <RouteMap
-                        pickup={ride.pickupLocation}
-                        destination={ride.destinationLocation}
-                    />
-                </div>
+                {/* Driver Location Live Tracking / Route Map */}
+                <section className="mt-5 space-y-3">
+                    {isTrackingActive && (
+                        <div className="flex items-center justify-between rounded-2xl bg-[var(--rf-surface)] p-4 border border-[var(--rf-border)] shadow-sm">
+                            <div>
+                                <h3 className="text-sm font-bold text-[var(--rf-midnight)]">
+                                    Driver location
+                                </h3>
+                                <p className="text-xs text-[var(--rf-muted)]">
+                                    {tracking.loading
+                                        ? "Getting driver's location..."
+                                        : tracking.isDisconnected
+                                        ? "Reconnecting live tracking..."
+                                        : tracking.timeAgoText}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {tracking.isStale && (
+                                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                                        Stale
+                                    </span>
+                                )}
+                                {!tracking.isStale && tracking.location?.latitude && (
+                                    <span className="flex items-center gap-1.5 rounded-full bg-[var(--rf-green)]/15 px-2.5 py-1 text-xs font-bold text-[var(--rf-green-dark)]">
+                                        <span className="h-2 w-2 rounded-full bg-[var(--rf-green-dark)] animate-ping" />
+                                        Live
+                                    </span>
+                                )}
+                                {(!tracking.location || tracking.location.latitude === null) && !tracking.loading && (
+                                    <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600">
+                                        Unavailable
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="h-64 w-full overflow-hidden rounded-3xl border border-[var(--rf-border)] shadow-sm">
+                        {isTrackingActive ? (
+                            <LiveTrackingMap
+                                pickup={ride.pickupLocation}
+                                destination={ride.destinationLocation}
+                                driverLocation={tracking.location}
+                            />
+                        ) : (
+                            <RouteMap
+                                pickup={ride.pickupLocation}
+                                destination={ride.destinationLocation}
+                            />
+                        )}
+                    </div>
+                </section>
 
                 <section className="mt-6 rounded-3xl border border-[var(--rf-border)] bg-[var(--rf-surface)] p-6 shadow-sm sm:p-8">
                     <div className="space-y-4">

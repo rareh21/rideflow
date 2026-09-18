@@ -133,3 +133,46 @@ export function subscribeToRideRequests(handlers: {
         socket.disconnect();
     };
 }
+
+export type DriverLocationUpdatedEvent = {
+    rideId: string;
+    driverId: string;
+    location: {
+        latitude: number;
+        longitude: number;
+        heading: number | null;
+        speedKmh: number | null;
+        accuracyM: number | null;
+        updatedAt: string;
+    };
+};
+
+export function subscribeToDriverLocation(
+    onLocationUpdate: (event: DriverLocationUpdatedEvent) => void,
+    onConnected?: () => void,
+) {
+    const token = sessionStorage.getItem("accessToken");
+
+    if (!token) {
+        return () => undefined;
+    }
+
+    const socket = io(REALTIME_URL, {
+        auth: { token },
+        transports: ["websocket"],
+    });
+
+    socket.on("driver.location.updated", onLocationUpdate);
+
+    if (onConnected) {
+        socket.on("connect", onConnected);
+    }
+
+    return () => {
+        socket.off("driver.location.updated", onLocationUpdate);
+        if (onConnected) {
+            socket.off("connect", onConnected);
+        }
+        socket.disconnect();
+    };
+}

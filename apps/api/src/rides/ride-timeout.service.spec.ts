@@ -98,10 +98,7 @@ describe("RideTimeoutService", () => {
         it("runs the Prisma transaction once the timeout elapses", async () => {
             service.scheduleTimeout(RIDE_ID);
 
-            jest.runAllTimers();
-            // Allow the async expireRide callback to resolve.
-            await Promise.resolve();
-            await Promise.resolve();
+            await jest.runAllTimersAsync();
 
             expect(prisma.$transaction).toHaveBeenCalledTimes(1);
         });
@@ -109,9 +106,7 @@ describe("RideTimeoutService", () => {
         it("emits ride.updated via the gateway when the ride is cancelled", async () => {
             service.scheduleTimeout(RIDE_ID);
 
-            jest.runAllTimers();
-            await Promise.resolve();
-            await Promise.resolve();
+            await jest.runAllTimersAsync();
 
             expect(gateway.emitRideUpdated).toHaveBeenCalledWith(
                 RIDER_ID,

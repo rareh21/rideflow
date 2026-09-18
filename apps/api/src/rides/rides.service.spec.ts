@@ -129,6 +129,10 @@ function buildPrismaStub(
                     driver: {
                         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
                     },
+                    payment: {
+                        upsert: jest.fn().mockResolvedValue({}),
+                        findUnique: jest.fn().mockResolvedValue(null),
+                    },
                 });
             }
             return cb;
@@ -787,6 +791,10 @@ describe("RidesService — updateStatus (Batch 5 Lifecycle & Completion)", () =>
                 },
                 driver: {
                     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+                },
+                payment: {
+                    upsert: jest.fn().mockResolvedValue({}),
+                    findUnique: jest.fn().mockResolvedValue(null),
                 },
             };
             return cb(tx);
