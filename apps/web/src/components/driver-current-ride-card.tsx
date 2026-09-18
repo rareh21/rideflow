@@ -21,7 +21,6 @@ import { determineVehicleType } from "@/lib/vehicles";
 import { RouteMap } from "@/components/route-map";
 import { RideReceipt } from "@/components/ride-receipt";
 import { RideReviewSection } from "@/components/ride-review-section";
-import { useDriverLocation } from "@/hooks/use-driver-location";
 
 const STATUS_CONFIG: Record<
     RideStatus,
@@ -93,16 +92,6 @@ export function DriverCurrentRideCard({
     const [completedReceipt, setCompletedReceipt] = useState<RideReceiptData | null>(null);
 
     const [riderRating, setRiderRating] = useState<UserRatingSummary | null>(null);
-
-    const isTrackingActive =
-        ride.status === "DRIVER_ASSIGNED" ||
-        ride.status === "DRIVER_ARRIVING" ||
-        ride.status === "DRIVER_ARRIVED" ||
-        ride.status === "IN_PROGRESS";
-
-    const locationHook = useDriverLocation({
-        enabled: isTrackingActive,
-    });
 
     useEffect(() => {
         const targetId = ride.riderId || ride.rider?.id;
@@ -230,29 +219,6 @@ export function DriverCurrentRideCard({
 
                 <StatusBadge status={ride.status} />
             </div>
-
-            {/* Live GPS Broadcasting Status */}
-            {isTrackingActive && (
-                <div className="mt-4 flex items-center justify-between rounded-2xl bg-[var(--rf-surface-muted)] p-3 text-xs border border-[var(--rf-border)]">
-                    <div className="flex items-center gap-2">
-                        <span className={`h-2.5 w-2.5 rounded-full ${locationHook.permissionState === "denied" ? "bg-red-500" : locationHook.isTracking ? "bg-[var(--rf-green-dark)] animate-ping" : "bg-amber-500"}`} />
-                        <span className="font-bold text-[var(--rf-midnight)]">
-                            {locationHook.permissionState === "denied"
-                                ? "Location permission denied — enable GPS in browser settings"
-                                : locationHook.errorCode === "unavailable"
-                                ? "GPS location signal currently unavailable"
-                                : locationHook.isTracking
-                                ? "Live GPS broadcasting active"
-                                : "Connecting GPS..."}
-                        </span>
-                    </div>
-                    {locationHook.lastSentTime && (
-                        <span className="text-[var(--rf-muted)] font-medium">
-                            Updated {Math.max(0, Math.floor((Date.now() - locationHook.lastSentTime) / 1000))}s ago
-                        </span>
-                    )}
-                </div>
-            )}
 
             {/* Feedback & Error banners */}
             {feedback && (
