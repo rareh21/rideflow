@@ -11,9 +11,20 @@ import { UsersModule } from './users/users.module';
 import { RidesModule } from "./rides/rides.module";
 import { AuthorizationModule } from "./authorization/authorization.module";
 import { LocationsModule } from "./locations/locations.module";
+import { PaymentModule } from "./payment/payment.module";
 
 @Module({
-  imports: [PrismaModule, AuthModule, DriversModule, VehiclesModule, UsersModule, RidesModule, AuthorizationModule, LocationsModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    DriversModule,
+    VehiclesModule,
+    UsersModule,
+    RidesModule,
+    AuthorizationModule,
+    LocationsModule,
+    PaymentModule,
+  ],
   controllers: [AppController, UsersController],
   providers: [AppService, UsersService],
 })

@@ -9,6 +9,7 @@ import {
     Loader2,
     MapPin,
     PlayCircle,
+    Star,
     XCircle,
 } from "lucide-react";
 import Link from "next/link";
@@ -18,9 +19,11 @@ import { useEffect, useState } from "react";
 import {
     getRide,
     getRideReceipt,
+    getUserRatingSummary,
     type Ride,
     type RideReceiptData,
     type RideStatus,
+    type UserRatingSummary,
     updateRideStatus,
 } from "@/lib/rides";
 import { subscribeToRideUpdates } from "@/lib/ride-realtime";
@@ -60,15 +63,37 @@ const ACTIONS: Partial<Record<RideStatus, {
     },
 };
 
+import { getRidePayment, type Payment } from "@/lib/payments";
+
 export default function DriverRideDetailsPage() {
     const params = useParams<{ id: string }>();
     const rideId = params.id;
 
     const [ride, setRide] = useState<Ride | null>(null);
     const [receipt, setReceipt] = useState<RideReceiptData | null>(null);
+    const [payment, setPayment] = useState<Payment | null>(null);
+    const [riderRating, setRiderRating] = useState<UserRatingSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [updating, setUpdating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const targetId = ride?.riderId || ride?.rider?.id;
+        if (targetId) {
+            getUserRatingSummary(targetId)
+                .then(setRiderRating)
+                .catch(() => setRiderRating(null));
+        }
+    }, [ride?.riderId, ride?.rider?.id]);
+
+    async function loadPayment(id: string) {
+        try {
+            const p = await getRidePayment(id);
+            setPayment(p);
+        } catch {
+            // Payment not yet created or error
+        }
+    }
 
     async function loadRide(showLoading = true) {
         try {
@@ -79,6 +104,7 @@ export default function DriverRideDetailsPage() {
             const data = await getRide(rideId);
             setRide(data);
             if (data.status === "COMPLETED") {
+                void loadPayment(rideId);
                 try {
                     const receiptData = await getRideReceipt(rideId);
                     setReceipt(receiptData);
@@ -106,6 +132,7 @@ export default function DriverRideDetailsPage() {
             setRide(event.ride);
             setError(null);
             if (event.status === "COMPLETED") {
+                void loadPayment(rideId);
                 void getRideReceipt(rideId).then(setReceipt).catch(() => {});
             }
         }
@@ -186,6 +213,7 @@ export default function DriverRideDetailsPage() {
                             durationMinutes={receipt?.durationMinutes ?? ride.estimatedDurationMinutes}
                             fare={receipt?.fare ?? ride.estimatedFare}
                             paymentMethod={receipt?.paymentMethod ?? ride.paymentMethod}
+                            payment={payment}
                             completedAt={receipt?.completedAt ?? ride.completedAt ?? ride.updatedAt}
                             actions={
                                 <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -199,10 +227,18 @@ export default function DriverRideDetailsPage() {
                             }
                         />
 
-                        <RideReviewSection
-                            rideId={ride.id}
-                            targetRole="RIDER"
-                        />
+                        {payment?.status === "SUCCEEDED" ? (
+                            <RideReviewSection
+                                rideId={ride.id}
+                                targetRole="RIDER"
+                            />
+                        ) : (
+                            <div className="rounded-3xl border border-[var(--rf-border)] bg-[var(--rf-surface)] p-6 text-center shadow-sm">
+                                <p className="text-sm font-semibold text-[var(--rf-muted)]">
+                                    Awaiting payment completion before review can be submitted.
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
             </main>
@@ -230,7 +266,15 @@ export default function DriverRideDetailsPage() {
 
                 <section className="mt-6 rounded-3xl border border-[var(--rf-border)] bg-[var(--rf-surface)] p-6 shadow-sm sm:p-8">
                     <p className="text-xs font-bold uppercase tracking-wider text-[var(--rf-muted)]">Rider</p>
-                    <h2 className="mt-1 text-xl font-bold text-[var(--rf-midnight)]">{ride.rider?.name ?? "Rider"}</h2>
+                    <div className="mt-1 flex items-center gap-2">
+                        <h2 className="text-xl font-bold text-[var(--rf-midnight)]">{ride.rider?.name ?? "Rider"}</h2>
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700 border border-amber-200">
+                            <Star size={12} className="fill-amber-400 text-amber-500" />
+                            {riderRating?.averageRating
+                                ? `${riderRating.averageRating} (${riderRating.totalRatings})`
+                                : "New Rider"}
+                        </span>
+                    </div>
                     <div className="mt-7 space-y-4">
                         <Location label="Pickup" value={ride.pickupLocation.label} first />
                         <div className="ml-4 h-6 border-l border-dashed border-[var(--rf-border)]" />

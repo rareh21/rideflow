@@ -37,6 +37,7 @@ model User {
 
   reviewsGiven    RideReview[]       @relation("ReviewsGiven")
   reviewsReceived RideReview[]       @relation("ReviewsReceived")
+  payments        Payment[]
 
   @@index([role])
 }
@@ -148,6 +149,7 @@ model Ride {
   updatedAt DateTime @updatedAt
   completedAt DateTime?
   reviews     RideReview[]
+  payment     Payment?
 
   @@index([riderId])
   @@index([driverId])
@@ -233,3 +235,38 @@ model SavedPlace {
 
   @@index([userId])
 }
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model Payment {
+  id String @id @default(uuid())
+
+  rideId String @unique
+  userId String
+
+  amount Decimal
+  currency String @default("INR")
+  method PaymentMethod
+  status PaymentStatus @default(PENDING)
+
+  provider String?
+  providerPaymentId String?
+  failureReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ride Ride @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([providerPaymentId])
+}
+

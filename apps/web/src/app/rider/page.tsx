@@ -1,21 +1,31 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
     ArrowRight,
     CarFront,
     MapPin,
     Search,
+    Star,
 } from "lucide-react";
 
 import { useAuth } from "@/context/auth-context";
 import { useBooking } from "@/context/booking-context";
 import { Can } from "@/authorization/Can";
 import { Permissions } from "@/authorization/permissions";
+import { getUserRatingSummary, type UserRatingSummary } from "@/lib/rides";
 
 export default function RiderPage() {
     const { user } = useAuth();
     const { pickup } = useBooking();
+    const [ratingSummary, setRatingSummary] = useState<UserRatingSummary | null>(null);
+
+    useEffect(() => {
+        getUserRatingSummary("me")
+            .then(setRatingSummary)
+            .catch(() => setRatingSummary(null));
+    }, []);
 
     return (
         <main className="min-h-full bg-rf-surface-muted text-rf-text">
@@ -28,9 +38,17 @@ export default function RiderPage() {
                     <div className="rounded-3xl bg-white p-6 shadow-sm sm:p-8">
 
                         <div className="max-w-xl">
-                            <p className="text-sm font-semibold text-rf-green">
-                                RIDEFLOW
-                            </p>
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm font-semibold text-rf-green">
+                                    RIDEFLOW
+                                </p>
+                                {ratingSummary?.averageRating ? (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700 border border-amber-200">
+                                        <Star size={13} className="fill-amber-400 text-amber-500" />
+                                        ★ {ratingSummary.averageRating} ({ratingSummary.totalRatings} rating{ratingSummary.totalRatings === 1 ? "" : "s"})
+                                    </span>
+                                ) : null}
+                            </div>
 
                             <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
                                 Where are you going?

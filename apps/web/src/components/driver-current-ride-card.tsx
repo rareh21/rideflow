@@ -10,12 +10,13 @@ import {
     Loader2,
     MapPin,
     PlayCircle,
+    Star,
     XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { getRideReceipt, updateRideStatus, type Ride, type RideReceiptData, type RideStatus } from "@/lib/rides";
+import { getRideReceipt, getUserRatingSummary, updateRideStatus, type Ride, type RideReceiptData, type RideStatus, type UserRatingSummary } from "@/lib/rides";
 import { determineVehicleType } from "@/lib/vehicles";
 import { RouteMap } from "@/components/route-map";
 import { RideReceipt } from "@/components/ride-receipt";
@@ -89,6 +90,17 @@ export function DriverCurrentRideCard({
     const [showCompletionModal, setShowCompletionModal] = useState(false);
     const [completedSummary, setCompletedSummary] = useState<Ride | null>(null);
     const [completedReceipt, setCompletedReceipt] = useState<RideReceiptData | null>(null);
+
+    const [riderRating, setRiderRating] = useState<UserRatingSummary | null>(null);
+
+    useEffect(() => {
+        const targetId = ride.riderId || ride.rider?.id;
+        if (targetId) {
+            getUserRatingSummary(targetId)
+                .then(setRiderRating)
+                .catch(() => setRiderRating(null));
+        }
+    }, [ride.riderId, ride.rider?.id]);
 
     const vehicleTier = ride.driver?.vehicle
         ? determineVehicleType(ride.driver.vehicle.make, ride.driver.vehicle.model)
@@ -192,9 +204,17 @@ export function DriverCurrentRideCard({
                         <span className="text-xs text-[var(--rf-muted)]">Active Ride</span>
                     </div>
 
-                    <h2 className="mt-1 text-xl font-bold text-[var(--rf-midnight)]">
-                        {ride.rider?.name ?? "Rider"}
-                    </h2>
+                    <div className="mt-1 flex items-center gap-2">
+                        <h2 className="text-xl font-bold text-[var(--rf-midnight)]">
+                            {ride.rider?.name ?? "Rider"}
+                        </h2>
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700 border border-amber-200">
+                            <Star size={12} className="fill-amber-400 text-amber-500" />
+                            {riderRating?.averageRating
+                                ? `${riderRating.averageRating} (${riderRating.totalRatings})`
+                                : "New Rider"}
+                        </span>
+                    </div>
                 </div>
 
                 <StatusBadge status={ride.status} />

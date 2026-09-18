@@ -42,6 +42,11 @@ import type {
     DriverProfile,
 } from "@/lib/drivers";
 
+import {
+    getUserRatingSummary,
+    type UserRatingSummary,
+} from "@/lib/rides";
+
 export default function ProfilePage() {
     const router = useRouter();
 
@@ -60,6 +65,9 @@ export default function ProfilePage() {
 
     const [driver, setDriver] =
         useState<DriverProfile | null>(null);
+
+    const [ratingSummary, setRatingSummary] =
+        useState<UserRatingSummary | null>(null);
 
     const [loading, setLoading] =
         useState(true);
@@ -89,6 +97,14 @@ export default function ProfilePage() {
                     await getUserProfile();
 
                 setProfile(data);
+
+                try {
+                    const ratingData =
+                        await getUserRatingSummary("me");
+                    setRatingSummary(ratingData);
+                } catch {
+                    setRatingSummary(null);
+                }
 
                 /*
                  * Driver-specific information is a capability.
@@ -175,6 +191,7 @@ export default function ProfilePage() {
                             email={profile.email}
                             role={profile.role}
                             createdAt={profile.createdAt}
+                            ratingSummary={ratingSummary}
                         />
 
                         <Can

@@ -1,8 +1,12 @@
+import { Star } from "lucide-react";
+import type { UserRatingSummary } from "@/lib/rides";
+
 type ProfileCardProps = {
     name: string;
     email: string;
     role: string;
     createdAt?: string;
+    ratingSummary?: UserRatingSummary | null;
 };
 
 function getInitials(name: string) {
@@ -28,6 +32,7 @@ export function ProfileCard({
     email,
     role,
     createdAt,
+    ratingSummary,
 }: ProfileCardProps) {
     return (
         <section
@@ -81,18 +86,29 @@ export function ProfileCard({
                         {email}
                     </p>
 
-                    <span
-                        className="
-              mt-3 inline-flex
-              rounded-full
-              bg-white/10
-              px-3 py-1
-              text-xs font-semibold
-              text-[var(--rf-green)]
-            "
-                    >
-                        {role}
-                    </span>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span
+                            className="
+                  inline-flex
+                  rounded-full
+                  bg-white/10
+                  px-3 py-1
+                  text-xs font-semibold
+                  text-[var(--rf-green)]
+                "
+                        >
+                            {role}
+                        </span>
+
+                        {ratingSummary !== undefined && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-3 py-1 text-xs font-semibold text-amber-300">
+                                <Star size={13} className="fill-amber-400 text-amber-400" />
+                                {ratingSummary?.averageRating
+                                    ? `${ratingSummary.averageRating} (${ratingSummary.totalRatings} rating${ratingSummary.totalRatings === 1 ? "" : "s"})`
+                                    : "No ratings yet"}
+                            </span>
+                        )}
+                    </div>
                 </div>
             </div>
 

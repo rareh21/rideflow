@@ -630,6 +630,29 @@ export class RidesService {
                         },
                     });
 
+                    if (nextStatus === RideStatus.COMPLETED) {
+                        const method = ride.paymentMethod ?? "UPI";
+                        const providerPaymentId = method === "CASH" ? null : `mock_pay_${ride.id.replace(/-/g, "").slice(0, 12)}`;
+                        await tx.payment.upsert({
+                            where: { rideId: ride.id },
+                            create: {
+                                rideId: ride.id,
+                                userId: ride.riderId,
+                                amount: ride.estimatedFare,
+                                currency: "INR",
+                                method,
+                                status: "SUCCEEDED",
+                                provider: method === "CASH" ? null : "mock",
+                                providerPaymentId,
+                            },
+                            update: {
+                                status: "SUCCEEDED",
+                                provider: method === "CASH" ? null : "mock",
+                                providerPaymentId,
+                            },
+                        });
+                    }
+
                     return updatedRide;
                 },
             );

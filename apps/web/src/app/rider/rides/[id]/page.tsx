@@ -30,6 +30,13 @@ import { RouteMap } from "@/components/route-map";
 import { RideReceipt } from "@/components/ride-receipt";
 import { RideReviewSection } from "@/components/ride-review-section";
 
+import {
+    createRidePayment,
+    getRidePayment,
+    processPayment,
+    type Payment,
+} from "@/lib/payments";
+
 export default function RideDetailsPage() {
     const params = useParams<{
         id: string;
@@ -43,14 +50,51 @@ export default function RideDetailsPage() {
     const [receipt, setReceipt] =
         useState<RideReceiptData | null>(null);
 
+    const [payment, setPayment] =
+        useState<Payment | null>(null);
+
     const [loading, setLoading] =
         useState(true);
 
     const [cancelling, setCancelling] =
         useState(false);
 
+    const [processingPayment, setProcessingPayment] =
+        useState(false);
+
     const [error, setError] =
         useState<string | null>(null);
+
+    async function loadPayment(id: string) {
+        try {
+            const p = await getRidePayment(id);
+            setPayment(p);
+        } catch {
+            try {
+                const created = await createRidePayment(id);
+                setPayment(created);
+            } catch {
+                // Payment creation failed or unauthorized
+            }
+        }
+    }
+
+    async function handleRetryPayment() {
+        if (!payment) return;
+        try {
+            setProcessingPayment(true);
+            const updated = await processPayment(payment.id);
+            setPayment(updated);
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Unable to process payment.",
+            );
+        } finally {
+            setProcessingPayment(false);
+        }
+    }
 
     async function loadRide(
         showLoading = true,
@@ -67,6 +111,7 @@ export default function RideDetailsPage() {
             setRide(data);
 
             if (data.status === "COMPLETED") {
+                void loadPayment(rideId);
                 try {
                     const receiptData = await getRideReceipt(rideId);
                     setReceipt(receiptData);
@@ -96,6 +141,7 @@ export default function RideDetailsPage() {
             setRide(event.ride);
             setError(null);
             if (event.status === "COMPLETED") {
+                void loadPayment(rideId);
                 void getRideReceipt(rideId).then(setReceipt).catch(() => {});
             }
         }
@@ -214,6 +260,9 @@ export default function RideDetailsPage() {
                             durationMinutes={receipt?.durationMinutes ?? ride.estimatedDurationMinutes}
                             fare={receipt?.fare ?? ride.estimatedFare}
                             paymentMethod={receipt?.paymentMethod ?? ride.paymentMethod}
+                            payment={payment}
+                            onRetryPayment={handleRetryPayment}
+                            isProcessingPayment={processingPayment}
                             completedAt={receipt?.completedAt ?? ride.completedAt ?? ride.updatedAt}
                             actions={
                                 <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -234,10 +283,18 @@ export default function RideDetailsPage() {
                             }
                         />
 
-                        <RideReviewSection
-                            rideId={ride.id}
-                            targetRole="DRIVER"
-                        />
+                        {payment?.status === "SUCCEEDED" ? (
+                            <RideReviewSection
+                                rideId={ride.id}
+                                targetRole="DRIVER"
+                            />
+                        ) : (
+                            <div className="rounded-3xl border border-[var(--rf-border)] bg-[var(--rf-surface)] p-6 text-center shadow-sm">
+                                <p className="text-sm font-semibold text-[var(--rf-muted)]">
+                                    Complete payment above to unlock ride review & feedback.
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
             </main>
