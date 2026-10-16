@@ -9,12 +9,15 @@ import {
     Compass,
     Loader2,
     MapPin,
+    Navigation,
     PlayCircle,
     Star,
     XCircle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
+import { useDriverLocation } from "@/hooks/use-driver-location";
 
 import { getRideReceipt, getUserRatingSummary, updateRideStatus, type Ride, type RideReceiptData, type RideStatus, type UserRatingSummary } from "@/lib/rides";
 import { determineVehicleType } from "@/lib/vehicles";
@@ -90,6 +93,19 @@ export function DriverCurrentRideCard({
     const [showCompletionModal, setShowCompletionModal] = useState(false);
     const [completedSummary, setCompletedSummary] = useState<Ride | null>(null);
     const [completedReceipt, setCompletedReceipt] = useState<RideReceiptData | null>(null);
+
+    const isTrackingActive =
+        ride.status === "DRIVER_ASSIGNED" ||
+        ride.status === "DRIVER_ARRIVING" ||
+        ride.status === "DRIVER_ARRIVED" ||
+        ride.status === "IN_PROGRESS";
+
+    const {
+        isTracking,
+        permissionState,
+        error: gpsError,
+    } = useDriverLocation({ enabled: isTrackingActive });
+
 
     const [riderRating, setRiderRating] = useState<UserRatingSummary | null>(null);
 
@@ -238,6 +254,39 @@ export function DriverCurrentRideCard({
                 <div role="alert" className="mt-4 flex items-center gap-2 rounded-2xl bg-red-50 p-3.5 text-xs font-bold text-red-700">
                     <AlertCircle size={15} className="shrink-0 text-red-600" />
                     <span>{error}</span>
+                </div>
+            )}
+
+            {/* Live GPS Broadcast Indicator Banner */}
+            {isTrackingActive && (
+                <div className="mt-4 flex items-center justify-between rounded-2xl border border-[var(--rf-border)] bg-[var(--rf-surface-muted)] p-3.5 text-xs">
+                    <div className="flex items-center gap-2.5">
+                        <Navigation size={14} className="text-[var(--rf-green-dark)] shrink-0 animate-pulse" />
+                        <div>
+                            <p className="font-bold text-[var(--rf-midnight)]">Live GPS Broadcast</p>
+                            <p className="text-[var(--rf-muted)] text-[11px]">
+                                {isTracking
+                                    ? "Broadcasting location to rider in real-time"
+                                    : permissionState === "denied"
+                                    ? "Permission denied — grant location access in browser"
+                                    : "Acquiring GPS signal..."}
+                            </p>
+                        </div>
+                    </div>
+
+                    {isTracking ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            Broadcasting
+                        </span>
+                    ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700 border border-amber-200">
+                            Connecting...
+                        </span>
+                    )}
                 </div>
             )}
 

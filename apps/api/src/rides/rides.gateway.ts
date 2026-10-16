@@ -22,6 +22,21 @@ export type RideRealtimePayload = {
     ride: unknown;
 };
 
+export type DriverLocationPayload = {
+    latitude: number;
+    longitude: number;
+    heading: number | null;
+    speedKmh: number | null;
+    accuracyM: number | null;
+    updatedAt: string;
+};
+
+export type DriverLocationUpdatedPayload = {
+    rideId: string;
+    driverId: string;
+    location: DriverLocationPayload;
+};
+
 @WebSocketGateway({
     cors: {
         origin: "http://localhost:3000",
@@ -144,5 +159,17 @@ export class RidesGateway
     emitRideRequestRemoved(rideId: string) {
         this.server.to("drivers").emit("ride.request.removed", { rideId });
         this.server.to("drivers").emit("ride.requests.changed", { rideId });
+    }
+
+    emitDriverLocationUpdated(
+        riderUserId: string,
+        driverUserId: string,
+        payload: DriverLocationUpdatedPayload,
+    ) {
+        this.emitToUsers(
+            [riderUserId, driverUserId],
+            "driver.location.updated",
+            payload,
+        );
     }
 }

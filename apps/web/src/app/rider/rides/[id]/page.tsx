@@ -27,6 +27,9 @@ import { subscribeToRideUpdates } from "@/lib/ride-realtime";
 
 import { Button } from "@/components/ui/button";
 import { RouteMap } from "@/components/route-map";
+import { DriverLiveMap } from "@/components/driver-live-map";
+import { DriverTrackingCard } from "@/components/driver-tracking-card";
+import { useDriverTracking } from "@/hooks/use-driver-tracking";
 import { RideReceipt } from "@/components/ride-receipt";
 import { RideReviewSection } from "@/components/ride-review-section";
 
@@ -64,6 +67,20 @@ export default function RideDetailsPage() {
 
     const [error, setError] =
         useState<string | null>(null);
+
+    const isTrackingActive =
+        ride?.status === "DRIVER_ASSIGNED" ||
+        ride?.status === "DRIVER_ARRIVING" ||
+        ride?.status === "DRIVER_ARRIVED" ||
+        ride?.status === "IN_PROGRESS";
+
+    const {
+        location: driverLocation,
+        loading: trackingLoading,
+        error: trackingError,
+        trackingStatus,
+        refetch: refetchTrackingLocation,
+    } = useDriverTracking(rideId, { enabled: isTrackingActive });
 
     async function loadPayment(id: string) {
         try {
@@ -144,8 +161,18 @@ export default function RideDetailsPage() {
                 void loadPayment(rideId);
                 void getRideReceipt(rideId).then(setReceipt).catch(() => {});
             }
+            // When driver is assigned, immediately fetch their location so the
+            // live map shows the driver marker without waiting for the next poll.
+            if (
+                event.status === "DRIVER_ASSIGNED" ||
+                event.status === "DRIVER_ARRIVING" ||
+                event.status === "DRIVER_ARRIVED" ||
+                event.status === "IN_PROGRESS"
+            ) {
+                void refetchTrackingLocation();
+            }
         }
-    }), [rideId]);
+    }), [rideId, refetchTrackingLocation]);
 
     async function handleCancel() {
         if (!ride) {
@@ -351,13 +378,35 @@ export default function RideDetailsPage() {
                     </div>
                 )}
 
-                {/* Interactive Route Map */}
-                <div className="mt-5 h-56 w-full overflow-hidden rounded-3xl border border-[var(--rf-border)] shadow-sm">
-                    <RouteMap
-                        pickup={ride.pickupLocation}
-                        destination={ride.destinationLocation}
-                    />
-                </div>
+                {/* Interactive Route / Driver Live Map */}
+                {isTrackingActive ? (
+                    <div className="mt-5 space-y-5">
+                        <div className="h-72 w-full overflow-hidden rounded-3xl border border-[var(--rf-border)] shadow-sm">
+                            <DriverLiveMap
+                                pickup={ride.pickupLocation}
+                                destination={ride.destinationLocation}
+                                driverLocation={driverLocation}
+                                trackingStatus={trackingStatus}
+                                rideStatus={ride.status}
+                                loading={trackingLoading}
+                                error={trackingError}
+                            />
+                        </div>
+                        <DriverTrackingCard
+                            driverName={ride.driver?.user.name}
+                            location={driverLocation}
+                            trackingStatus={trackingStatus}
+                            onRefetch={refetchTrackingLocation}
+                        />
+                    </div>
+                ) : (
+                    <div className="mt-5 h-56 w-full overflow-hidden rounded-3xl border border-[var(--rf-border)] shadow-sm">
+                        <RouteMap
+                            pickup={ride.pickupLocation}
+                            destination={ride.destinationLocation}
+                        />
+                    </div>
+                )}
 
                 <section className="mt-6 rounded-3xl border border-[var(--rf-border)] bg-[var(--rf-surface)] p-6 shadow-sm sm:p-8">
                     <div className="space-y-4">

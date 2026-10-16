@@ -8,6 +8,14 @@ const REALTIME_URL =
     process.env.NEXT_PUBLIC_API_URL ??
     "http://localhost:4000";
 
+import type { DriverLocation } from "./driver-location";
+
+export type DriverLocationUpdatedEvent = {
+    rideId: string;
+    driverId: string;
+    location: DriverLocation;
+};
+
 export type RideUpdatedEvent = {
     rideId: string;
     status: RideStatus;
@@ -133,3 +141,34 @@ export function subscribeToRideRequests(handlers: {
         socket.disconnect();
     };
 }
+
+export function subscribeToDriverLocationUpdates(
+    onLocationUpdate: (event: DriverLocationUpdatedEvent) => void,
+    onConnected?: () => void,
+) {
+    const token = sessionStorage.getItem("accessToken");
+
+    if (!token) {
+        return () => undefined;
+    }
+
+    const socket = io(REALTIME_URL, {
+        auth: { token },
+        transports: ["websocket"],
+    });
+
+    socket.on("driver.location.updated", onLocationUpdate);
+
+    if (onConnected) {
+        socket.on("connect", onConnected);
+    }
+
+    return () => {
+        socket.off("driver.location.updated", onLocationUpdate);
+        if (onConnected) {
+            socket.off("connect", onConnected);
+        }
+        socket.disconnect();
+    };
+}
+

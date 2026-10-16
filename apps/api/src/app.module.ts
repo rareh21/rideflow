@@ -5,13 +5,14 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { AuthModule } from './auth/auth.module';
 import { UsersController } from './users/users.controller';
 import { UsersService } from './users/users.service';
-import { DriversModule } from './drivers/drivers.module';
+import { DriversModule } from './drivers/drivers.module'; 
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { UsersModule } from './users/users.module';
 import { RidesModule } from "./rides/rides.module";
 import { AuthorizationModule } from "./authorization/authorization.module";
 import { LocationsModule } from "./locations/locations.module";
 import { PaymentModule } from "./payment/payment.module";
+import { DriverLocationModule } from "./modules/driver-location/driver-location.module";
 
 @Module({
   imports: [
@@ -24,8 +25,9 @@ import { PaymentModule } from "./payment/payment.module";
     AuthorizationModule,
     LocationsModule,
     PaymentModule,
+    DriverLocationModule,
   ],
   controllers: [AppController, UsersController],
   providers: [AppService, UsersService],
 })
-export class AppModule {}
+export class  AppModule {}

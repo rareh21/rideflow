@@ -1020,6 +1020,32 @@ export class RidesService {
 
             this.emitRideUpdated(acceptedRide);
             this.ridesGateway.emitRideRequestRemoved(rideId);
+
+            // Immediately push the driver's last known location to the rider
+            // so the live tracking map shows the driver marker the moment
+            // the ride is accepted, without waiting for the next GPS tick.
+            const lastKnownLocation = await this.prisma.driverLocation.findUnique({
+                where: { driverId: driver.id },
+            });
+
+            if (lastKnownLocation && acceptedRide.riderId) {
+                this.ridesGateway.emitDriverLocationUpdated(
+                    acceptedRide.riderId,
+                    userId,
+                    {
+                        rideId: acceptedRide.id,
+                        driverId: driver.id,
+                        location: {
+                            latitude: Number(lastKnownLocation.latitude),
+                            longitude: Number(lastKnownLocation.longitude),
+                            heading: lastKnownLocation.heading !== null ? Number(lastKnownLocation.heading) : null,
+                            speedKmh: lastKnownLocation.speedKmh !== null ? Number(lastKnownLocation.speedKmh) : null,
+                            accuracyM: lastKnownLocation.accuracyM !== null ? Number(lastKnownLocation.accuracyM) : null,
+                            updatedAt: lastKnownLocation.updatedAt.toISOString(),
+                        },
+                    },
+                );
+            }
         }
 
         return {
@@ -1027,6 +1053,7 @@ export class RidesService {
             ride: acceptedRide,
         };
     }
+
 
     async getDriverCurrentRide(userId: string) {
         const driver = await this.prisma.driver.findUnique({

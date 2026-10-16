@@ -8,13 +8,17 @@ import {
     Clock3,
     Loader2,
     MapPin,
+    Navigation,
     PlayCircle,
     Star,
+    Wifi,
     XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+
+import { useDriverLocation } from "@/hooks/use-driver-location";
 
 import {
     getRide,
@@ -76,6 +80,18 @@ export default function DriverRideDetailsPage() {
     const [loading, setLoading] = useState(true);
     const [updating, setUpdating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const isTrackingActive =
+        ride?.status === "DRIVER_ASSIGNED" ||
+        ride?.status === "DRIVER_ARRIVING" ||
+        ride?.status === "DRIVER_ARRIVED" ||
+        ride?.status === "IN_PROGRESS";
+
+    const {
+        isTracking,
+        permissionState,
+        error: gpsError,
+    } = useDriverLocation({ enabled: isTrackingActive });
 
     useEffect(() => {
         const targetId = ride?.riderId || ride?.rider?.id;
@@ -261,6 +277,52 @@ export default function DriverRideDetailsPage() {
                     <div role="alert" className="mt-5 flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
                         <AlertCircle size={18} className="mt-0.5 shrink-0 text-[var(--rf-danger)]" />
                         {error}
+                    </div>
+                )}
+
+                {isTrackingActive && (
+                    <div className="mt-5 rounded-2xl border border-[var(--rf-border)] bg-[var(--rf-surface)] p-4 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--rf-green)]/10 text-[var(--rf-green-dark)]">
+                                    <Navigation size={16} />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-bold text-[var(--rf-midnight)]">
+                                        Live GPS Broadcast
+                                    </p>
+                                    <p className="text-xs text-[var(--rf-muted)]">
+                                        {isTracking
+                                            ? "Broadcasting your live location to your rider"
+                                            : "Starting GPS location broadcast..."}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {isTracking ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 border border-emerald-200">
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                    </span>
+                                    Broadcasting GPS
+                                </span>
+                            ) : permissionState === "denied" ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700 border border-red-200">
+                                    Permission Denied
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700 border border-amber-200">
+                                    Connecting GPS...
+                                </span>
+                            )}
+                        </div>
+
+                        {gpsError && (
+                            <p className="mt-2 text-xs text-red-700 bg-red-50 p-2.5 rounded-xl border border-red-200">
+                                {gpsError}
+                            </p>
+                        )}
                     </div>
                 )}
 
