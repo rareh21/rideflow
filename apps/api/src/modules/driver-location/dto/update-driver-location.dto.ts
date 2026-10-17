@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, Max, Min } from "class-validator";
+import { IsDateString, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class UpdateDriverLocationDto {
     @IsNumber()
@@ -26,4 +26,12 @@ export class UpdateDriverLocationDto {
     @IsNumber()
     @Min(0)
     accuracyM?: number;
+
+    @IsOptional()
+    @IsDateString()
+    timestamp?: string;
+
+    @IsOptional()
+    @IsString()
+    rideId?: string;
 }

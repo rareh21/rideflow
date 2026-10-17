@@ -39,6 +39,41 @@ export class DriverLocationService {
             throw new UnauthorizedException("Authenticated user is not an active driver.");
         }
 
+        if (dto.rideId) {
+            const ride = await this.prisma.ride.findUnique({
+                where: { id: dto.rideId },
+            });
+
+            if (!ride) {
+                throw new NotFoundException("Ride not found.");
+            }
+
+            if (ride.driverId !== driver.id) {
+                throw new ForbiddenException("You are not the assigned driver for this ride.");
+            }
+
+            if (
+                ride.status === RideStatus.COMPLETED ||
+                ride.status === RideStatus.CANCELLED
+            ) {
+                throw new BadRequestException("Cannot update location for a completed or cancelled ride.");
+            }
+        }
+
+        if (dto.timestamp) {
+            const existingLocation = await this.prisma.driverLocation.findUnique({
+                where: { driverId: driver.id },
+            });
+
+            if (existingLocation) {
+                const incomingTime = new Date(dto.timestamp).getTime();
+                const existingTime = existingLocation.updatedAt.getTime();
+                if (incomingTime < existingTime) {
+                    throw new BadRequestException("Stale or out-of-order location update rejected.");
+                }
+            }
+        }
+
         const location = await this.prisma.driverLocation.upsert({
             where: { driverId: driver.id },
             create: {

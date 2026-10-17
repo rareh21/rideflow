@@ -1,7 +1,7 @@
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
-const inFlightGetRequests = new Map<string, Promise<any>>();
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
 
 export async function api<T>(
   path: string,

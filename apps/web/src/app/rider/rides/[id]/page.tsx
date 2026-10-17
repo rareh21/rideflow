@@ -396,6 +396,9 @@ export default function RideDetailsPage() {
                             driverName={ride.driver?.user.name}
                             location={driverLocation}
                             trackingStatus={trackingStatus}
+                            rideStatus={ride.status}
+                            pickup={ride.pickupLocation}
+                            destination={ride.destinationLocation}
                             onRefetch={refetchTrackingLocation}
                         />
                     </div>

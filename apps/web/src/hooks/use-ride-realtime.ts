@@ -17,7 +17,9 @@ export function useRideRealtime(options: {
     onConnected?: () => void;
 }) {
     const optionsRef = useRef(options);
-    optionsRef.current = options;
+    useEffect(() => {
+        optionsRef.current = options;
+    });
 
     useEffect(() => {
         let cleanupUpdates: (() => void) | undefined;

@@ -19,7 +19,7 @@ import { useRouter } from "next/navigation";
 
 import { useDriverLocation } from "@/hooks/use-driver-location";
 
-import { getRideReceipt, getUserRatingSummary, updateRideStatus, type Ride, type RideReceiptData, type RideStatus, type UserRatingSummary } from "@/lib/rides";
+import { getUserRatingSummary, updateRideStatus, type Ride, type RideReceiptData, type RideStatus, type UserRatingSummary } from "@/lib/rides";
 import { determineVehicleType } from "@/lib/vehicles";
 import { RouteMap } from "@/components/route-map";
 import { RideReceipt } from "@/components/ride-receipt";
@@ -287,6 +287,12 @@ export function DriverCurrentRideCard({
                             Connecting...
                         </span>
                     )}
+                </div>
+            )}
+
+            {isTrackingActive && gpsError && (
+                <div className="mt-2 rounded-xl bg-red-50 p-2.5 text-xs text-red-700 border border-red-200">
+                    {gpsError}
                 </div>
             )}
 

@@ -16,12 +16,19 @@ export interface UseDriverLocationOptions {
 export function useDriverLocation(options: UseDriverLocationOptions = {}) {
     const { enabled = false, updateIntervalMs = 3000 } = options;
 
-    const [isSupported, setIsSupported] = useState(true);
+    const [isSupported] = useState(() => {
+        return typeof window !== "undefined" && "geolocation" in navigator;
+    });
     const [isTracking, setIsTracking] = useState(false);
     const [permissionState, setPermissionState] = useState<
         "prompt" | "granted" | "denied"
     >("prompt");
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(() => {
+        if (typeof window !== "undefined" && !("geolocation" in navigator)) {
+            return "Geolocation is not supported by this browser.";
+        }
+        return null;
+    });
     const [lastLocation, setLastLocation] = useState<DriverLocation | null>(null);
     const [lastUpdatedTime, setLastUpdatedTime] = useState<Date | null>(null);
 
@@ -69,12 +76,8 @@ export function useDriverLocation(options: UseDriverLocationOptions = {}) {
 
     useEffect(() => {
         if (typeof window === "undefined" || !("geolocation" in navigator)) {
-            setIsSupported(false);
-            setError("Geolocation is not supported by this browser.");
             return;
         }
-
-        setIsSupported(true);
 
         if ("permissions" in navigator && navigator.permissions?.query) {
             navigator.permissions
@@ -93,7 +96,6 @@ export function useDriverLocation(options: UseDriverLocationOptions = {}) {
 
     useEffect(() => {
         if (!enabled || !isSupported) {
-            setIsTracking(false);
             return;
         }
 
@@ -190,8 +192,6 @@ export function useDriverLocation(options: UseDriverLocationOptions = {}) {
                 maximumAge: 3000,
             },
         );
-
-        setIsTracking(true);
 
         return () => {
             cancelled = true;

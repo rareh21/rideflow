@@ -118,6 +118,13 @@ function buildPrismaStub(
                 _count: { rating: 2 },
             }),
         },
+        driverLocation: {
+            findUnique: jest.fn().mockResolvedValue(null),
+        },
+        payment: {
+            findUnique: jest.fn().mockResolvedValue(null),
+            upsert: jest.fn().mockResolvedValue({ id: "payment-1", status: "SUCCEEDED" }),
+        },
         $transaction: jest.fn().mockImplementation(async (cb) => {
             if (typeof cb === "function") {
                 return cb({
@@ -128,6 +135,9 @@ function buildPrismaStub(
                     },
                     driver: {
                         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+                    },
+                    payment: {
+                        upsert: jest.fn().mockResolvedValue({ id: "payment-1", status: "SUCCEEDED" }),
                     },
                 });
             }
@@ -787,6 +797,9 @@ describe("RidesService — updateStatus (Batch 5 Lifecycle & Completion)", () =>
                 },
                 driver: {
                     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+                },
+                payment: {
+                    upsert: jest.fn().mockResolvedValue({ id: "payment-1", status: "SUCCEEDED" }),
                 },
             };
             return cb(tx);

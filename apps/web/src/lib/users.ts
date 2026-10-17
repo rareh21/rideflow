@@ -1,5 +1,5 @@
 import { api } from "@/lib/api";
-import type { User, UserRole } from "@/types/auth";
+import type { UserRole } from "@/types/auth";
 
 export type UserProfile = {
     id: string;

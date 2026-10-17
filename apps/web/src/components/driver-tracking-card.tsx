@@ -1,15 +1,26 @@
 "use client";
+import { useEffect, useState } from "react";
 
 import { AlertTriangle, Car, Compass, Gauge, MapPin, RefreshCw, WifiOff } from "lucide-react";
 
 import type { DriverLocation } from "@/lib/driver-location";
+import { calculateDistanceKm, formatDistance } from "@/lib/driver-location";
 import type { TrackingStatus } from "@/hooks/use-driver-tracking";
 import { Button } from "@/components/ui/button";
+
+interface LatLng {
+    latitude: number | string;
+    longitude: number | string;
+    label?: string;
+}
 
 interface DriverTrackingCardProps {
     driverName?: string;
     location: DriverLocation | null;
     trackingStatus: TrackingStatus;
+    rideStatus?: string;
+    pickup?: LatLng;
+    destination?: LatLng;
     onRefetch?: () => void;
 }
 
@@ -17,8 +28,20 @@ export function DriverTrackingCard({
     driverName = "Your driver",
     location,
     trackingStatus,
+    rideStatus,
+    pickup,
+    destination,
     onRefetch,
 }: DriverTrackingCardProps) {
+    const [currentTime, setCurrentTime] = useState<number | null>(null);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCurrentTime(Date.now());
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
+
     const updatedAtStr = location?.updatedAt
         ? new Date(location.updatedAt).toLocaleTimeString([], {
             hour: "2-digit",
@@ -27,9 +50,47 @@ export function DriverTrackingCard({
         })
         : null;
 
-    const secondsAgo = location?.updatedAt
-        ? Math.max(0, Math.floor((Date.now() - new Date(location.updatedAt).getTime()) / 1000))
+    const secondsAgo = location?.updatedAt && currentTime !== null
+        ? Math.max(0, Math.floor((currentTime - new Date(location.updatedAt).getTime()) / 1000))
         : null;
+
+    // Calculate distance to pickup or destination
+    const pLat = pickup ? Number(pickup.latitude) : NaN;
+    const pLng = pickup ? Number(pickup.longitude) : NaN;
+    const dLat = destination ? Number(destination.latitude) : NaN;
+    const dLng = destination ? Number(destination.longitude) : NaN;
+    const locLat = location ? Number(location.latitude) : NaN;
+    const locLng = location ? Number(location.longitude) : NaN;
+
+    const isDriverArriving =
+        rideStatus === "DRIVER_ASSIGNED" ||
+        rideStatus === "DRIVER_ARRIVING" ||
+        rideStatus === "DRIVER_ARRIVED";
+
+    const isInProgress = rideStatus === "IN_PROGRESS";
+
+    // Distance to pickup while arriving, or distance to destination while in progress
+    const distanceToTargetKm =
+        location && !isNaN(locLat) && !isNaN(locLng)
+            ? isDriverArriving && !isNaN(pLat) && !isNaN(pLng)
+                ? calculateDistanceKm(locLat, locLng, pLat, pLng)
+                : isInProgress && !isNaN(dLat) && !isNaN(dLng)
+                    ? calculateDistanceKm(locLat, locLng, dLat, dLng)
+                    : null
+            : null;
+
+    const distanceAwayFormatted = distanceToTargetKm !== null ? formatDistance(distanceToTargetKm) : null;
+
+    // Subtitle text under driver name
+    const subTitle = isDriverArriving
+        ? distanceAwayFormatted
+            ? `${driverName} is ${distanceAwayFormatted} from pickup`
+            : `${driverName} is heading to pickup`
+        : isInProgress
+            ? distanceAwayFormatted
+                ? `${driverName} is ${distanceAwayFormatted} from destination`
+                : "Trip in progress"
+            : `${driverName} on the way`;
 
     return (
         <section className="rounded-3xl border border-[var(--rf-border)] bg-[var(--rf-surface)] p-5 shadow-sm sm:p-6">
@@ -43,13 +104,63 @@ export function DriverTrackingCard({
                             Live Driver Tracking
                         </h2>
                         <p className="text-xs text-[var(--rf-muted)]">
-                            {driverName} on the way
+                            {subTitle}
                         </p>
                     </div>
                 </div>
 
                 <StatusBadge trackingStatus={trackingStatus} />
             </div>
+
+            {/* Proximity / Arriving Highlight Banner */}
+            {isDriverArriving && distanceToTargetKm !== null && (
+                <div
+                    role="status"
+                    className={`mt-4 flex items-center justify-between rounded-2xl p-4 border transition-all ${
+                        distanceToTargetKm < 0.1
+                            ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                            : distanceToTargetKm <= 2
+                                ? "bg-blue-50 border-blue-300 text-blue-900 shadow-sm"
+                                : "bg-sky-50/70 border-sky-200 text-sky-900"
+                    }`}
+                >
+                    <div className="flex items-center gap-3">
+                        <div
+                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                                distanceToTargetKm < 0.1
+                                    ? "bg-emerald-200/60 text-emerald-800"
+                                    : "bg-blue-200/60 text-blue-800"
+                            }`}
+                        >
+                            <Car size={20} className={distanceToTargetKm < 0.1 ? "" : "animate-pulse"} />
+                        </div>
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider opacity-75">
+                                {distanceToTargetKm < 0.1 ? "Driver Arrived" : "Approaching Pickup"}
+                            </p>
+                            <p className="text-sm font-bold">
+                                {distanceToTargetKm < 0.1 ? (
+                                    <span>{driverName} has reached your pickup spot</span>
+                                ) : (
+                                    <span>
+                                        Your driver is <strong>{distanceAwayFormatted}</strong>
+                                    </span>
+                                )}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="text-right">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1 text-xs font-black shadow-xs">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                            </span>
+                            {distanceToTargetKm < 0.1 ? "Here" : `${distanceToTargetKm.toFixed(1)} km`}
+                        </span>
+                    </div>
+                </div>
+            )}
 
             {trackingStatus === "stale" && secondsAgo !== null && (
                 <div role="alert" className="mt-4 flex items-center gap-2.5 rounded-2xl bg-amber-50 p-3.5 text-xs text-amber-800 border border-amber-200">

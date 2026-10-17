@@ -102,6 +102,29 @@ function loadLeafletAssets(onLoad: () => void) {
     }
 }
 
+interface LeafletMapInstance {
+    remove: () => void;
+    fitBounds: (bounds: unknown, options?: { padding?: [number, number]; maxZoom?: number }) => void;
+    invalidateSize: () => void;
+}
+
+interface LeafletLayerInstance {
+    remove: () => void;
+    addTo: (map: unknown) => LeafletLayerInstance;
+    setLatLng: (latlng: [number, number]) => void;
+    setLatLngs: (latlngs: [number, number][]) => void;
+    setIcon: (icon: unknown) => void;
+}
+
+interface LeafletGlobal {
+    map: (element: HTMLElement, options?: Record<string, unknown>) => LeafletMapInstance;
+    tileLayer: (url: string, options?: Record<string, unknown>) => { addTo: (map: unknown) => unknown };
+    divIcon: (options: Record<string, unknown>) => unknown;
+    marker: (latlng: [number, number], options?: Record<string, unknown>) => LeafletLayerInstance;
+    polyline: (latlngs: [number, number][], options?: Record<string, unknown>) => LeafletLayerInstance;
+    latLngBounds: (points: [number, number][]) => unknown;
+}
+
 export function DriverLiveMap({
     pickup,
     destination,
@@ -113,10 +136,10 @@ export function DriverLiveMap({
     error = null,
 }: DriverLiveMapProps) {
     const mapContainerRef = useRef<HTMLDivElement>(null);
-    const mapInstanceRef = useRef<any>(null);
-    const driverMarkerRef = useRef<any>(null);
-    const polylineLayerRef = useRef<any>(null);
-    const approachPolylineRef = useRef<any>(null);
+    const mapInstanceRef = useRef<LeafletMapInstance | null>(null);
+    const driverMarkerRef = useRef<LeafletLayerInstance | null>(null);
+    const polylineLayerRef = useRef<LeafletLayerInstance | null>(null);
+    const approachPolylineRef = useRef<LeafletLayerInstance | null>(null);
     const [leafletLoaded, setLeafletLoaded] = useState(false);
 
     useEffect(() => {
@@ -127,7 +150,7 @@ export function DriverLiveMap({
     useEffect(() => {
         if (!leafletLoaded || !mapContainerRef.current) return;
 
-        const L = (window as unknown as { L: any }).L;
+        const L = (window as unknown as { L: LeafletGlobal }).L;
         if (!L) return;
 
         const pLat = Number(pickup.latitude);
@@ -224,11 +247,7 @@ export function DriverLiveMap({
         }
 
         // Fit map bounds to include pickup and destination
-        const boundsPoints: [number, number][] = [...routePoints];
-        if (driverLocation) {
-            boundsPoints.push([Number(driverLocation.latitude), Number(driverLocation.longitude)]);
-        }
-        const bounds = L.latLngBounds(boundsPoints);
+        const bounds = L.latLngBounds(routePoints);
         map.fitBounds(bounds, { padding: [50, 50] });
 
         // Ensure Leaflet recalculates size after DOM layout finishes
@@ -253,7 +272,7 @@ export function DriverLiveMap({
     useEffect(() => {
         if (!leafletLoaded || !mapInstanceRef.current) return;
 
-        const L = (window as unknown as { L: any }).L;
+        const L = (window as unknown as { L: LeafletGlobal }).L;
         if (!L) return;
 
         const pLat = Number(pickup.latitude);
@@ -399,7 +418,7 @@ export function DriverLiveMap({
                         </span>
                         {driverToPickupKm < 0.1
                             ? "Driver arrived at pickup!"
-                            : `Driver arriving — ${driverToPickupKm} km to pickup`}
+                            : `Driver is ${driverToPickupKm < 1 ? Math.round(driverToPickupKm * 1000) + "m" : driverToPickupKm.toFixed(1) + " km"} away`}
                     </span>
                 ) : trackingStatus === "live" ? (
                     <span className="flex items-center gap-1.5 text-emerald-700">

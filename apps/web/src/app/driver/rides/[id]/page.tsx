@@ -11,7 +11,6 @@ import {
     Navigation,
     PlayCircle,
     Star,
-    Wifi,
     XCircle,
 } from "lucide-react";
 import Link from "next/link";

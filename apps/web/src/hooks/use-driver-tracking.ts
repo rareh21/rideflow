@@ -32,18 +32,20 @@ export function useDriverTracking(
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isDisconnected, setIsDisconnected] = useState(false);
-    const [now, setNow] = useState<number>(Date.now());
+    const [now, setNow] = useState<number>(() => Date.now());
 
     const rideIdRef = useRef(rideId);
-    rideIdRef.current = rideId;
+    useEffect(() => {
+        rideIdRef.current = rideId;
+    }, [rideId]);
 
     const fetchLatestLocation = useCallback(async () => {
         if (!rideId) return;
 
         try {
-            setError(null);
             const latest = await getRideDriverLocation(rideId);
             setLocation(latest);
+            setError(null);
             setIsDisconnected(false);
         } catch {
             // Gracefully handle initial location missing without setting hard error
@@ -55,11 +57,29 @@ export function useDriverTracking(
 
     // Initial fetch on mount or rideId change
     useEffect(() => {
-        if (enabled && rideId) {
-            setLoading(true);
-            void fetchLatestLocation();
-        }
-    }, [enabled, rideId, fetchLatestLocation]);
+        if (!enabled || !rideId) return;
+
+        let active = true;
+        getRideDriverLocation(rideId)
+            .then((latest) => {
+                if (!active) return;
+                setLocation(latest);
+                setError(null);
+                setIsDisconnected(false);
+            })
+            .catch(() => {
+                if (!active) return;
+                setLocation(null);
+            })
+            .finally(() => {
+                if (!active) return;
+                setLoading(false);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [enabled, rideId]);
 
     // Timer to recalculate staleness every 5 seconds
     useEffect(() => {
