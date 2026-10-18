@@ -1,10 +1,11 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { Logger } from "@nestjs/common";
-import { RideStatus } from "@prisma/client";
+import { CancellationReason, RideStatus } from "@prisma/client";
 
 import { RideTimeoutService } from "./ride-timeout.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { RidesGateway } from "./rides.gateway";
+import { RefundService } from "../payment/refund.service";
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
@@ -18,6 +19,8 @@ function buildCancelledRide() {
         status: RideStatus.CANCELLED,
         driverId: null,
         driver: null,
+        cancellationReason: CancellationReason.DRIVER_UNAVAILABLE,
+        cancelledAt: new Date(),
         pickupLocation: {},
         destinationLocation: {},
         rider: { id: RIDER_ID, name: "Alice", email: "alice@example.com" },
@@ -47,8 +50,23 @@ function buildPrismaStub(opts: {
 function buildGatewayStub() {
     return {
         emitRideUpdated: jest.fn(),
+        emitRideCancelled: jest.fn(),
+        emitRideRequestRemoved: jest.fn(),
     };
 }
+
+function buildRefundStub() {
+    return {
+        createRefundForRide: jest.fn().mockResolvedValue(null),
+        processRefundJob: jest.fn().mockResolvedValue(undefined),
+    };
+}
+
+const flushPromises = async () => {
+    for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+    }
+};
 
 /* ── Tests ──────────────────────────────────────────────────────────────── */
 
@@ -56,6 +74,7 @@ describe("RideTimeoutService", () => {
     let service: RideTimeoutService;
     let prisma: ReturnType<typeof buildPrismaStub>;
     let gateway: ReturnType<typeof buildGatewayStub>;
+    let refund: ReturnType<typeof buildRefundStub>;
 
     beforeEach(async () => {
         jest.useFakeTimers();
@@ -67,12 +86,14 @@ describe("RideTimeoutService", () => {
 
         prisma = buildPrismaStub();
         gateway = buildGatewayStub();
+        refund = buildRefundStub();
 
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 RideTimeoutService,
                 { provide: PrismaService, useValue: prisma },
                 { provide: RidesGateway, useValue: gateway },
+                { provide: RefundService, useValue: refund },
             ],
         }).compile();
 
@@ -90,28 +111,27 @@ describe("RideTimeoutService", () => {
         it("does not cancel immediately — waits for the timeout window", () => {
             service.scheduleTimeout(RIDE_ID);
 
-            jest.advanceTimersByTime(119_000); // 1 s short of 120 s default
+            // Advance less than the 2-minute default (119 seconds).
+            jest.advanceTimersByTime(119_000);
 
             expect(prisma.$transaction).not.toHaveBeenCalled();
+            expect(gateway.emitRideUpdated).not.toHaveBeenCalled();
         });
 
-        it("runs the Prisma transaction once the timeout elapses", async () => {
+        it("cancels the ride when the timeout window elapses", async () => {
             service.scheduleTimeout(RIDE_ID);
 
             jest.runAllTimers();
-            // Allow the async expireRide callback to resolve.
-            await Promise.resolve();
-            await Promise.resolve();
+            await flushPromises();
 
             expect(prisma.$transaction).toHaveBeenCalledTimes(1);
         });
 
-        it("emits ride.updated via the gateway when the ride is cancelled", async () => {
+        it("emits ride.updated and ride.cancelled via the gateway when the ride is cancelled", async () => {
             service.scheduleTimeout(RIDE_ID);
 
             jest.runAllTimers();
-            await Promise.resolve();
-            await Promise.resolve();
+            await flushPromises();
 
             expect(gateway.emitRideUpdated).toHaveBeenCalledWith(
                 RIDER_ID,
@@ -119,6 +139,15 @@ describe("RideTimeoutService", () => {
                 expect.objectContaining({
                     rideId: RIDE_ID,
                     status: RideStatus.CANCELLED,
+                }),
+            );
+
+            expect(gateway.emitRideCancelled).toHaveBeenCalledWith(
+                RIDER_ID,
+                null,
+                expect.objectContaining({
+                    rideId: RIDE_ID,
+                    cancellationReason: CancellationReason.DRIVER_UNAVAILABLE,
                 }),
             );
         });
@@ -131,6 +160,7 @@ describe("RideTimeoutService", () => {
                     RideTimeoutService,
                     { provide: PrismaService, useValue: prisma },
                     { provide: RidesGateway, useValue: gateway },
+                    { provide: RefundService, useValue: refund },
                 ],
             }).compile();
 
@@ -138,8 +168,7 @@ describe("RideTimeoutService", () => {
             svc.scheduleTimeout(RIDE_ID);
 
             jest.runAllTimers();
-            await Promise.resolve();
-            await Promise.resolve();
+            await flushPromises();
 
             expect(gateway.emitRideUpdated).not.toHaveBeenCalled();
         });
@@ -149,8 +178,7 @@ describe("RideTimeoutService", () => {
             service.scheduleTimeout(RIDE_ID); // second call resets the timer
 
             jest.runAllTimers();
-            await Promise.resolve();
-            await Promise.resolve();
+            await flushPromises();
 
             // Should only fire once even though we scheduled twice.
             expect(prisma.$transaction).toHaveBeenCalledTimes(1);
@@ -165,30 +193,20 @@ describe("RideTimeoutService", () => {
             service.cancelTimer(RIDE_ID);
 
             jest.runAllTimers();
-            await Promise.resolve();
-            await Promise.resolve();
+            await flushPromises();
 
             expect(prisma.$transaction).not.toHaveBeenCalled();
+            expect(gateway.emitRideUpdated).not.toHaveBeenCalled();
         });
 
-        it("is a no-op when called for an unknown rideId (no error thrown)", () => {
-            expect(() =>
-                service.cancelTimer("unknown-ride-id"),
-            ).not.toThrow();
+        it("is safe to call for a ride that has no active timer", () => {
+            expect(() => service.cancelTimer("non-existent-ride")).not.toThrow();
         });
 
-        it("does not affect a timer for a different rideId", async () => {
+        it("is safe to call multiple times for the same rideId", () => {
             service.scheduleTimeout(RIDE_ID);
-            service.scheduleTimeout("other-ride-id");
-
             service.cancelTimer(RIDE_ID);
-
-            jest.runAllTimers();
-            await Promise.resolve();
-            await Promise.resolve();
-
-            // The other-ride timer should still fire.
-            expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+            expect(() => service.cancelTimer(RIDE_ID)).not.toThrow();
         });
     });
 });

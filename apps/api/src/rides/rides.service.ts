@@ -4,9 +4,12 @@ import {
     ForbiddenException,
     BadRequestException,
     ConflictException,
+    Inject,
+    forwardRef,
 } from "@nestjs/common";
 
 import {
+    CancellationReason,
     Prisma,
     RideStatus,
     RideType,
@@ -18,12 +21,14 @@ import { CreateRideQuoteDto } from "./dto/create-ride-quote.dto";
 import { CreateRoutePreviewDto } from "./dto/create-route-preview.dto";
 import { CreateRideReviewDto } from "./dto/create-ride-review.dto";
 import { RideHistoryQueryDto } from "./dto/ride-history-query.dto";
+import { CancelRideDto } from "./dto/cancel-ride.dto";
 import { RidesGateway } from "./rides.gateway";
 import { RideTimeoutService } from "./ride-timeout.service";
 import { canTransitionRideStatus } from "./ride-status";
 import { RoutingService } from "./routing/routing.service";
 import { calculateFare } from "./utils/fare-calculator";
 import { determineVehicleType } from "./utils/vehicle-type";
+import { RefundService } from "../payment/refund.service";
 
 @Injectable()
 export class RidesService {
@@ -32,6 +37,8 @@ export class RidesService {
         private readonly ridesGateway: RidesGateway,
         private readonly rideTimeoutService: RideTimeoutService,
         private readonly routingService: RoutingService,
+        @Inject(forwardRef(() => RefundService))
+        private readonly refundService: RefundService,
     ) { }
 
     private emitRideUpdated(
@@ -342,6 +349,8 @@ export class RidesService {
                             },
                         },
                     },
+                    payment: true,
+                    refund: true,
                 },
             });
 
@@ -776,7 +785,157 @@ export class RidesService {
             createdAt: ride.createdAt,
             updatedAt: ride.updatedAt,
             completedAt: ride.completedAt ?? null,
+            cancelledAt: ride.cancelledAt ?? null,
+            cancellationReason: ride.cancellationReason ?? null,
+            cancellationNote: ride.cancellationNote ?? null,
+            cancelledById: ride.cancelledById ?? null,
+            refund: ride.refund
+                ? {
+                    id: ride.refund.id,
+                    amount: Number(ride.refund.amount),
+                    currency: ride.refund.currency,
+                    status: ride.refund.status,
+                    reason: ride.refund.reason ?? null,
+                    failureReason: ride.refund.failureReason ?? null,
+                    createdAt: ride.refund.createdAt,
+                    updatedAt: ride.refund.updatedAt,
+                    completedAt: ride.refund.completedAt ?? null,
+                }
+                : null,
         };
+    }
+
+    async cancelRide(
+        rideId: string,
+        userId: string,
+        dto?: CancelRideDto,
+    ) {
+        const reason = dto?.reason ?? CancellationReason.CHANGE_OF_PLANS;
+        const note = dto?.note ?? null;
+        const now = new Date();
+
+        let createdRefundJobId: string | null = null;
+
+        const result = await this.prisma.$transaction(async (tx) => {
+            // Requirement 2 & 3: Conditional database transition, rider cancellation only while SEARCHING_DRIVER
+            const updateResult = await tx.ride.updateMany({
+                where: {
+                    id: rideId,
+                    riderId: userId,
+                    status: RideStatus.SEARCHING_DRIVER,
+                },
+                data: {
+                    status: RideStatus.CANCELLED,
+                    cancellationReason: reason,
+                    cancellationNote: note,
+                    cancelledAt: now,
+                    cancelledById: userId,
+                },
+            });
+
+            if (updateResult.count === 0) {
+                const existing = await tx.ride.findUnique({
+                    where: { id: rideId },
+                });
+
+                if (!existing) {
+                    throw new NotFoundException("Ride not found");
+                }
+
+                if (existing.riderId !== userId) {
+                    throw new ForbiddenException(
+                        "You do not have access to cancel this ride",
+                    );
+                }
+
+                if (existing.status !== RideStatus.SEARCHING_DRIVER) {
+                    throw new BadRequestException(
+                        `Rider can only cancel a ride while searching for a driver. Current status: ${existing.status}`,
+                    );
+                }
+
+                throw new BadRequestException("Ride cannot be cancelled");
+            }
+
+            // Requirement 4: Create eligible refund records and durable refund jobs in the same transaction as cancellation
+            const refundResult = await this.refundService.createRefundForRide(
+                tx,
+                rideId,
+                userId,
+                reason,
+            );
+
+            if (refundResult?.jobId) {
+                createdRefundJobId = refundResult.jobId;
+            }
+
+            const fullRide = await tx.ride.findUnique({
+                where: { id: rideId },
+                include: {
+                    pickupLocation: true,
+                    destinationLocation: true,
+                    rider: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                        },
+                    },
+                    driver: {
+                        select: {
+                            id: true,
+                            status: true,
+                            user: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                },
+                            },
+                            vehicle: {
+                                select: {
+                                    make: true,
+                                    model: true,
+                                    year: true,
+                                    plateNumber: true,
+                                },
+                            },
+                        },
+                    },
+                    payment: true,
+                    refund: true,
+                    reviews: true,
+                },
+            });
+
+            return {
+                ride: fullRide!,
+                refund: refundResult?.refund ?? null,
+            };
+        });
+
+        // Outside transaction:
+        this.rideTimeoutService.cancelTimer(rideId);
+        this.ridesGateway.emitRideRequestRemoved(rideId);
+
+        this.emitRideUpdated(result.ride);
+        this.ridesGateway.emitRideCancelled(
+            result.ride.riderId,
+            result.ride.driver?.user?.id ?? null,
+            {
+                rideId: result.ride.id,
+                cancellationReason: result.ride.cancellationReason,
+                cancellationNote: result.ride.cancellationNote,
+                cancelledAt: result.ride.cancelledAt ?? now,
+                cancelledById: userId,
+                refund: result.refund,
+            },
+        );
+
+        if (createdRefundJobId) {
+            void this.refundService.processRefundJob(createdRefundJobId);
+        }
+
+        return result.ride;
     }
 
     async updateStatus(
@@ -826,7 +985,7 @@ export class RidesService {
         }
 
         /*
-         * Rider can only cancel.
+         * Rider can only cancel while searching for a driver.
          */
         if (isRider) {
             if (nextStatus !== RideStatus.CANCELLED) {
@@ -834,6 +993,7 @@ export class RidesService {
                     "Rider can only cancel the ride",
                 );
             }
+            return this.cancelRide(rideId, userId);
         }
 
         /*
@@ -879,6 +1039,7 @@ export class RidesService {
             ) &&
             ride.driverId
         ) {
+            let driverCancelRefundJobId: string | null = null;
             const updatedRide = await this.prisma.$transaction(
                 async (tx) => {
                     const updatedRide =
@@ -889,6 +1050,12 @@ export class RidesService {
                             data: {
                                 status: nextStatus,
                                 ...(nextStatus === RideStatus.COMPLETED ? { completedAt: ride.completedAt ?? new Date() } : {}),
+                                ...(nextStatus === RideStatus.CANCELLED ? {
+                                    cancelledAt: new Date(),
+                                    cancellationReason: CancellationReason.OTHER,
+                                    cancellationNote: "Cancelled by driver",
+                                    cancelledById: userId,
+                                } : {}),
                             },
                             include: {
                                 pickupLocation: true,
@@ -920,6 +1087,8 @@ export class RidesService {
                                         },
                                     },
                                 },
+                                payment: true,
+                                refund: true,
                             },
                         });
 
@@ -956,11 +1125,42 @@ export class RidesService {
                         });
                     }
 
+                    if (nextStatus === RideStatus.CANCELLED) {
+                        const refundResult = await this.refundService.createRefundForRide(
+                            tx,
+                            rideId,
+                            ride.riderId,
+                            "Cancelled by driver",
+                        );
+                        if (refundResult?.jobId) {
+                            driverCancelRefundJobId = refundResult.jobId;
+                        }
+                    }
+
                     return updatedRide;
                 },
             );
 
             this.emitRideUpdated(updatedRide);
+
+            if (nextStatus === RideStatus.CANCELLED) {
+                this.ridesGateway.emitRideCancelled(
+                    updatedRide.riderId,
+                    updatedRide.driver?.user?.id ?? null,
+                    {
+                        rideId: updatedRide.id,
+                        cancellationReason: updatedRide.cancellationReason,
+                        cancellationNote: updatedRide.cancellationNote,
+                        cancelledAt: updatedRide.cancelledAt ?? new Date(),
+                        cancelledById: userId,
+                        refund: (updatedRide as any).refund,
+                    },
+                );
+
+                if (driverCancelRefundJobId) {
+                    void this.refundService.processRefundJob(driverCancelRefundJobId);
+                }
+            }
 
             return updatedRide;
         }
@@ -1008,6 +1208,18 @@ export class RidesService {
         this.emitRideUpdated(updatedRide);
 
         return updatedRide;
+    }
+
+    async getRefund(
+        rideId: string,
+        userId: string,
+        role: string,
+    ) {
+        return this.refundService.getRefundForRide(
+            rideId,
+            userId,
+            role as any,
+        );
     }
 
     async findAvailableDriver() {

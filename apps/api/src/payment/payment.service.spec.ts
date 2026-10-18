@@ -4,6 +4,7 @@ import { PaymentMethod, PaymentStatus } from "@prisma/client";
 
 import { PaymentService } from "./payment.service";
 import { MockPaymentProvider } from "./providers/mock-payment.provider";
+import { PAYMENT_PROVIDER } from "./payment.constants";
 import { PrismaService } from "../prisma/prisma.service";
 import { isValidPaymentTransition } from "./payment-status";
 
@@ -112,6 +113,7 @@ describe("PaymentService", () => {
                 PaymentService,
                 { provide: PrismaService, useValue: prisma },
                 { provide: MockPaymentProvider, useValue: mockProvider },
+                { provide: PAYMENT_PROVIDER, useValue: mockProvider },
             ],
         }).compile();
 

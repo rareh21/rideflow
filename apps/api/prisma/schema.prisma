@@ -38,6 +38,7 @@ model User {
   reviewsGiven    RideReview[]       @relation("ReviewsGiven")
   reviewsReceived RideReview[]       @relation("ReviewsReceived")
   payments        Payment[]
+  refunds         Refund[]
 
   @@index([role])
 }
@@ -100,6 +101,17 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+enum CancellationReason {
+  DRIVER_TAKING_TOO_LONG
+  CHANGE_OF_PLANS
+  WRONG_PICKUP_LOCATION
+  FOUND_ALTERNATIVE
+  PRICE_TOO_HIGH
+  ACCIDENTAL_REQUEST
+  DRIVER_UNAVAILABLE
+  OTHER
 }
 
 enum RideStatus {
@@ -165,8 +177,14 @@ model Ride {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   completedAt DateTime?
+  cancelledAt DateTime?
+  cancellationReason CancellationReason?
+  cancellationNote   String?
+  cancelledById      String?
+
   reviews     RideReview[]
   payment     Payment?
+  refund      Refund?
 
   @@index([riderId])
   @@index([driverId])
@@ -281,9 +299,70 @@ model Payment {
 
   ride Ride @relation(fields: [rideId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id])
+  refund Refund?
 
   @@index([userId])
   @@index([status])
   @@index([providerPaymentId])
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+enum RefundJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Refund {
+  id               String        @id @default(uuid())
+  paymentId        String        @unique
+  rideId           String        @unique
+  userId           String
+  amount           Decimal
+  currency         String        @default("INR")
+  status           RefundStatus  @default(PENDING)
+  reason           String?
+  provider         String?
+  providerRefundId String?
+  failureReason    String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  completedAt      DateTime?
+
+  payment Payment    @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  ride    Ride       @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  user    User       @relation(fields: [userId], references: [id])
+  job     RefundJob?
+
+  @@index([userId])
+  @@index([status])
+  @@index([rideId])
+}
+
+model RefundJob {
+  id             String          @id @default(uuid())
+  refundId       String          @unique
+  idempotencyKey String          @unique
+  status         RefundJobStatus @default(PENDING)
+  attempts       Int             @default(0)
+  maxAttempts    Int             @default(5)
+  lockedAt       DateTime?
+  lockedBy       String?
+  lastError      String?
+  nextRetryAt    DateTime        @default(now())
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  refund Refund @relation(fields: [refundId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+  @@index([lockedAt])
 }
 

@@ -20,10 +20,11 @@ import {
     getRide,
     getRideReceipt,
     RideStatus,
+    type CancellationReason,
     type Ride,
     type RideReceiptData,
 } from "@/lib/rides";
-import { subscribeToRideUpdates } from "@/lib/ride-realtime";
+import { subscribeToRideUpdates, subscribeToRefundUpdates } from "@/lib/ride-realtime";
 
 import { Button } from "@/components/ui/button";
 import { RouteMap } from "@/components/route-map";
@@ -32,12 +33,16 @@ import { DriverTrackingCard } from "@/components/driver-tracking-card";
 import { useDriverTracking } from "@/hooks/use-driver-tracking";
 import { RideReceipt } from "@/components/ride-receipt";
 import { RideReviewSection } from "@/components/ride-review-section";
+import { CancellationDialog } from "@/components/rides/cancellation-dialog";
+import { RefundStatusCard } from "@/components/rides/refund-status-card";
 
 import {
     createRidePayment,
     getRidePayment,
+    getRideRefund,
     processPayment,
     type Payment,
+    type Refund,
 } from "@/lib/payments";
 
 export default function RideDetailsPage() {
@@ -56,10 +61,16 @@ export default function RideDetailsPage() {
     const [payment, setPayment] =
         useState<Payment | null>(null);
 
+    const [refund, setRefund] =
+        useState<Refund | null>(null);
+
     const [loading, setLoading] =
         useState(true);
 
     const [cancelling, setCancelling] =
+        useState(false);
+
+    const [isCancelDialogOpen, setIsCancelDialogOpen] =
         useState(false);
 
     const [processingPayment, setProcessingPayment] =
@@ -127,6 +138,12 @@ export default function RideDetailsPage() {
 
             setRide(data);
 
+            if (data.refund) {
+                setRefund(data.refund as unknown as Refund);
+            } else if (data.status === "CANCELLED") {
+                void getRideRefund(rideId).then(setRefund).catch(() => {});
+            }
+
             if (data.status === "COMPLETED") {
                 void loadPayment(rideId);
                 try {
@@ -153,29 +170,67 @@ export default function RideDetailsPage() {
         }
     }, [rideId]);
 
-    useEffect(() => subscribeToRideUpdates((event) => {
-        if (event.rideId === rideId) {
-            setRide(event.ride);
-            setError(null);
-            if (event.status === "COMPLETED") {
-                void loadPayment(rideId);
-                void getRideReceipt(rideId).then(setReceipt).catch(() => {});
-            }
-            // When driver is assigned, immediately fetch their location so the
-            // live map shows the driver marker without waiting for the next poll.
-            if (
-                event.status === "DRIVER_ASSIGNED" ||
-                event.status === "DRIVER_ARRIVING" ||
-                event.status === "DRIVER_ARRIVED" ||
-                event.status === "IN_PROGRESS"
-            ) {
-                void refetchTrackingLocation();
-            }
-        }
-    }), [rideId, refetchTrackingLocation]);
+    useEffect(() => {
+        const unsubscribeRide = subscribeToRideUpdates(
+            (event) => {
+                if (event.rideId === rideId) {
+                    setRide(event.ride);
+                    setError(null);
+                    if (event.ride.refund) {
+                        setRefund(event.ride.refund as unknown as Refund);
+                    }
+                    if (event.status === "COMPLETED") {
+                        void loadPayment(rideId);
+                        void getRideReceipt(rideId).then(setReceipt).catch(() => {});
+                    }
+                    if (event.status === "CANCELLED") {
+                        void getRideRefund(rideId).then(setRefund).catch(() => {});
+                    }
+                    // When driver is assigned, immediately fetch their location so the
+                    // live map shows the driver marker without waiting for the next poll.
+                    if (
+                        event.status === "DRIVER_ASSIGNED" ||
+                        event.status === "DRIVER_ARRIVING" ||
+                        event.status === "DRIVER_ARRIVED" ||
+                        event.status === "IN_PROGRESS"
+                    ) {
+                        void refetchTrackingLocation();
+                    }
+                }
+            },
+            () => {
+                // Reconcile after connection/reconnection
+                void loadRide(false);
+                void getRideRefund(rideId).then(setRefund).catch(() => {});
+            },
+        );
 
-    async function handleCancel() {
-        if (!ride) {
+        const unsubscribeRefund = subscribeToRefundUpdates((event) => {
+            if (event.rideId === rideId) {
+                setRefund((prev) =>
+                    prev
+                        ? {
+                              ...prev,
+                              status: event.status,
+                              amount: event.amount,
+                              currency: event.currency,
+                              failureReason: event.failureReason ?? prev.failureReason,
+                          }
+                        : null,
+                );
+                // Also refetch authoritative refund record
+                void getRideRefund(rideId).then(setRefund).catch(() => {});
+            }
+        });
+
+        return () => {
+            unsubscribeRide();
+            unsubscribeRefund();
+        };
+    }, [rideId, refetchTrackingLocation]);
+
+    async function handleConfirmCancel(reason: CancellationReason, note?: string) {
+        if (!ride || cancelling) {
             return;
         }
 
@@ -183,12 +238,15 @@ export default function RideDetailsPage() {
             setCancelling(true);
             setError(null);
 
-            const updatedRide =
-                await cancelRide(
-                    ride.id,
-                );
+            const updatedRide = await cancelRide(ride.id, reason, note);
 
             setRide(updatedRide);
+            if (updatedRide.refund) {
+                setRefund(updatedRide.refund as unknown as Refund);
+            } else {
+                void getRideRefund(ride.id).then(setRefund).catch(() => {});
+            }
+            setIsCancelDialogOpen(false);
         } catch (err) {
             setError(
                 err instanceof Error
@@ -259,11 +317,7 @@ export default function RideDetailsPage() {
         return null;
     }
 
-    const canCancel =
-        ride.status === "SEARCHING_DRIVER" ||
-        ride.status === "DRIVER_ASSIGNED" ||
-        ride.status === "DRIVER_ARRIVING" ||
-        ride.status === "DRIVER_ARRIVED";
+    const canCancel = ride.status === "SEARCHING_DRIVER";
 
     if (ride.status === "COMPLETED") {
         return (
@@ -522,6 +576,18 @@ export default function RideDetailsPage() {
                     </section>
                 )}
 
+                {ride.status === "CANCELLED" && (
+                    <div className="mt-5">
+                        <RefundStatusCard
+                            refund={refund}
+                            cancellationReason={ride.cancellationReason}
+                            cancellationNote={ride.cancellationNote}
+                            cancelledAt={ride.cancelledAt}
+                            paymentMethod={ride.paymentMethod}
+                        />
+                    </div>
+                )}
+
                 {canCancel && (
                     <section className="mt-5 rounded-3xl border border-red-100 bg-[var(--rf-surface)] p-6">
                         <h2 className="font-bold text-[var(--rf-midnight)]">
@@ -529,38 +595,29 @@ export default function RideDetailsPage() {
                         </h2>
 
                         <p className="mt-1 text-sm text-[var(--rf-muted)]">
-                            You can cancel this ride
-                            while it is still active.
+                            You can cancel this ride while we are searching for a driver.
                         </p>
 
                         <Button
                             variant="danger"
                             className="mt-5"
                             disabled={cancelling}
-                            onClick={
-                                handleCancel
-                            }
+                            onClick={() => setIsCancelDialogOpen(true)}
                         >
-                            {cancelling ? (
-                                <>
-                                    <Loader2
-                                        size={16}
-                                        className="animate-spin"
-                                    />
-                                    Cancelling...
-                                </>
-                            ) : (
-                                <>
-                                    <XCircle
-                                        size={16}
-                                    />
-                                    Cancel ride
-                                </>
-                            )}
+                            <XCircle size={16} />
+                            Cancel ride
                         </Button>
                     </section>
                 )}
             </div>
+
+            <CancellationDialog
+                isOpen={isCancelDialogOpen}
+                onClose={() => setIsCancelDialogOpen(false)}
+                onConfirm={handleConfirmCancel}
+                isCancelling={cancelling}
+                error={error}
+            />
         </main>
     );
 }

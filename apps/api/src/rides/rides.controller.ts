@@ -25,6 +25,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 
 import type { AuthUser } from "../auth/types/auth-user.type";
 import { UpdateRideStatusDto } from "./dto/update-ride-status.dto";
+import { CancelRideDto } from "./dto/cancel-ride.dto";
 
 @Controller("rides")
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -240,6 +241,37 @@ export class RidesController {
         return this.ridesService.acceptRide(
             rideId,
             user.userId,
+        );
+    }
+
+    @Post(":id/cancel")
+    @Roles(UserRole.RIDER)
+    cancelRide(
+        @Param("id") rideId: string,
+        @CurrentUser() user: AuthUser,
+        @Body() dto?: CancelRideDto,
+    ) {
+        return this.ridesService.cancelRide(
+            rideId,
+            user.userId,
+            dto,
+        );
+    }
+
+    @Get(":id/refund")
+    @Roles(
+        UserRole.RIDER,
+        UserRole.DRIVER,
+        UserRole.ADMIN,
+    )
+    getRefund(
+        @Param("id") rideId: string,
+        @CurrentUser() user: AuthUser,
+    ) {
+        return this.ridesService.getRefund(
+            rideId,
+            user.userId,
+            user.role,
         );
     }
 }

@@ -1,9 +1,9 @@
-import { Injectable, Logger } from "@nestjs/common";
-
-import { RideStatus } from "@prisma/client";
+import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
+import { CancellationReason, RideStatus } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { RidesGateway } from "./rides.gateway";
+import { RefundService } from "../payment/refund.service";
 
 /**
  * How long (in milliseconds) the platform waits for a driver to accept a
@@ -28,6 +28,8 @@ export class RideTimeoutService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly ridesGateway: RidesGateway,
+        @Inject(forwardRef(() => RefundService))
+        private readonly refundService: RefundService,
     ) {}
 
     /**
@@ -81,7 +83,10 @@ export class RideTimeoutService {
         );
 
         try {
-            const cancelled = await this.prisma.$transaction(async (tx) => {
+            let createdRefundJobId: string | null = null;
+            const now = new Date();
+
+            const cancelledResult = await this.prisma.$transaction(async (tx) => {
                 /*
                  * updateMany with a status condition acts as an optimistic
                  * lock: it only updates (and counts 1) when the ride is still
@@ -95,6 +100,10 @@ export class RideTimeoutService {
                     },
                     data: {
                         status: RideStatus.CANCELLED,
+                        cancellationReason: CancellationReason.DRIVER_UNAVAILABLE,
+                        cancellationNote: "Search timeout elapsed (no driver available)",
+                        cancelledAt: now,
+                        cancelledById: null,
                     },
                 });
 
@@ -104,7 +113,7 @@ export class RideTimeoutService {
                 }
 
                 // Fetch the full ride record for the socket payload.
-                return tx.ride.findUnique({
+                const fullRide = await tx.ride.findUnique({
                     where: { id: rideId },
                     include: {
                         pickupLocation: true,
@@ -137,17 +146,42 @@ export class RideTimeoutService {
                                 },
                             },
                         },
+                        payment: true,
+                        refund: true,
                     },
                 });
+
+                if (!fullRide) {
+                    return null;
+                }
+
+                // Create eligible refund and durable job in the SAME transaction
+                const refundResult = await this.refundService.createRefundForRide(
+                    tx,
+                    rideId,
+                    fullRide.riderId,
+                    CancellationReason.DRIVER_UNAVAILABLE,
+                );
+
+                if (refundResult?.jobId) {
+                    createdRefundJobId = refundResult.jobId;
+                }
+
+                return {
+                    ride: fullRide,
+                    refund: refundResult?.refund ?? null,
+                };
             });
 
-            if (!cancelled) {
+            if (!cancelledResult) {
                 this.logger.debug(
                     `Ride ${rideId} was no longer in SEARCHING_DRIVER — ` +
                     "auto-cancel skipped",
                 );
                 return;
             }
+
+            const { ride: cancelled, refund } = cancelledResult;
 
             this.logger.log(`Ride ${rideId} auto-cancelled (no driver accepted)`);
 
@@ -167,6 +201,23 @@ export class RideTimeoutService {
                     ride: cancelled,
                 },
             );
+
+            this.ridesGateway.emitRideCancelled(
+                cancelled.riderId,
+                cancelled.driver?.userId ?? cancelled.driver?.user?.id ?? null,
+                {
+                    rideId: cancelled.id,
+                    cancellationReason: cancelled.cancellationReason,
+                    cancellationNote: cancelled.cancellationNote,
+                    cancelledAt: cancelled.cancelledAt ?? now,
+                    cancelledById: null,
+                    refund,
+                },
+            );
+
+            if (createdRefundJobId) {
+                void this.refundService.processRefundJob(createdRefundJobId);
+            }
         } catch (err) {
             this.logger.error(
                 `Failed to auto-cancel ride ${rideId}`,

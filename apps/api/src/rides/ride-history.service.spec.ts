@@ -11,6 +11,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { RidesGateway } from "./rides.gateway";
 import { RideTimeoutService } from "./ride-timeout.service";
 import { RoutingService } from "./routing/routing.service";
+import { RefundService } from "../payment/refund.service";
 import { RidesService } from "./rides.service";
 import { RideHistoryQueryDto } from "./dto/ride-history-query.dto";
 
@@ -102,6 +103,7 @@ describe("RidesService - History, Search & Filtering", () => {
                 { provide: RidesGateway, useValue: {} },
                 { provide: RideTimeoutService, useValue: {} },
                 { provide: RoutingService, useValue: {} },
+                { provide: RefundService, useValue: {} },
             ],
         }).compile();
 

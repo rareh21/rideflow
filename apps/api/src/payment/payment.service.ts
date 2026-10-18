@@ -1,13 +1,15 @@
 import {
     BadRequestException,
     ForbiddenException,
+    Inject,
     Injectable,
     NotFoundException,
 } from "@nestjs/common";
 import { PaymentMethod, PaymentStatus } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
-import { MockPaymentProvider } from "./providers/mock-payment.provider";
+import type { PaymentProvider } from "./providers/payment-provider.interface";
+import { PAYMENT_PROVIDER } from "./payment.constants";
 import { isValidPaymentTransition } from "./payment-status";
 
 export type SanitizedPayment = {
@@ -28,7 +30,8 @@ export type SanitizedPayment = {
 export class PaymentService {
     constructor(
         private readonly prisma: PrismaService,
-        private readonly paymentProvider: MockPaymentProvider,
+        @Inject(PAYMENT_PROVIDER)
+        private readonly paymentProvider: PaymentProvider,
     ) { }
 
     /**

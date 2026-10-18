@@ -78,6 +78,21 @@ export type Ride = {
     createdAt: string;
     updatedAt: string;
     completedAt?: string | null;
+    cancelledAt?: string | null;
+    cancellationReason?: string | null;
+    cancellationNote?: string | null;
+    cancelledById?: string | null;
+    refund?: {
+        id: string;
+        amount: number;
+        currency: string;
+        status: "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED";
+        reason?: string | null;
+        failureReason?: string | null;
+        createdAt: string;
+        updatedAt: string;
+        completedAt?: string | null;
+    } | null;
 };
 
 /**
@@ -176,13 +191,53 @@ export async function updateRideStatus(
     );
 }
 
+export type CancellationReason =
+    | "DRIVER_TAKING_TOO_LONG"
+    | "CHANGE_OF_PLANS"
+    | "WRONG_PICKUP_LOCATION"
+    | "FOUND_ALTERNATIVE"
+    | "PRICE_TOO_HIGH"
+    | "ACCIDENTAL_REQUEST"
+    | "DRIVER_UNAVAILABLE"
+    | "OTHER";
+
 export async function cancelRide(
     rideId: string,
+    reason?: CancellationReason | string,
+    note?: string,
 ) {
-    return updateRideStatus(
-        rideId,
-        "CANCELLED",
+    return api<Ride>(
+        `/rides/${rideId}/cancel`,
+        {
+            method: "POST",
+            body: JSON.stringify({
+                reason: reason ?? "CHANGE_OF_PLANS",
+                note: note ?? null,
+            }),
+        },
     );
+}
+
+export async function getRideRefund(
+    rideId: string,
+) {
+    try {
+        return await api<{
+            id: string;
+            rideId: string;
+            paymentId: string;
+            amount: number;
+            currency: string;
+            status: "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED";
+            reason?: string | null;
+            failureReason?: string | null;
+            createdAt: string;
+            updatedAt: string;
+            completedAt?: string | null;
+        }>(`/rides/${rideId}/refund`);
+    } catch {
+        return null;
+    }
 }
 
 export type RideRequest = Ride & {

@@ -5,8 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { cancelRide, getRide } from "@/lib/rides";
-import type { Ride } from "@/lib/rides";
+import type { CancellationReason, Ride } from "@/lib/rides";
 import { subscribeToRideUpdates } from "@/lib/ride-realtime";
+import { CancellationDialog } from "@/components/rides/cancellation-dialog";
 
 export default function FindingDriverPage() {
     const router = useRouter();
@@ -25,6 +26,7 @@ export default function FindingDriverPage() {
     );
 
     const [cancelling, setCancelling] = useState(false);
+    const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
 
     /**
      * True when the server auto-cancelled because no driver accepted in time.
@@ -125,7 +127,7 @@ export default function FindingDriverPage() {
         };
     }, [rideId, router]);
 
-    async function handleCancel() {
+    async function handleConfirmCancel(reason: CancellationReason, note?: string) {
         if (!ride || cancelling) {
             return;
         }
@@ -134,8 +136,9 @@ export default function FindingDriverPage() {
             setCancelling(true);
             setError(null);
 
-            const updatedRide = await cancelRide(ride.id);
+            const updatedRide = await cancelRide(ride.id, reason, note);
 
+            setIsCancelDialogOpen(false);
             router.replace(`/rider/rides/${updatedRide.id}`);
         } catch (err) {
             setError(
@@ -301,10 +304,10 @@ export default function FindingDriverPage() {
                 <button
                     type="button"
                     disabled={cancelling}
-                    onClick={() => void handleCancel()}
+                    onClick={() => setIsCancelDialogOpen(true)}
                     className="mt-6 text-sm font-semibold text-rf-danger transition hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                    {cancelling ? "Cancelling ride..." : "Cancel ride"}
+                    Cancel ride
                 </button>
 
                 <Link
@@ -315,6 +318,14 @@ export default function FindingDriverPage() {
                 </Link>
 
             </section>
+
+            <CancellationDialog
+                isOpen={isCancelDialogOpen}
+                onClose={() => setIsCancelDialogOpen(false)}
+                onConfirm={handleConfirmCancel}
+                isCancelling={cancelling}
+                error={error}
+            />
         </main>
     );
 }

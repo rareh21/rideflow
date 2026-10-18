@@ -7,6 +7,7 @@ import { RidesGateway } from "./rides.gateway";
 import { RideTimeoutService } from "./ride-timeout.service";
 import { RoutingService } from "./routing/routing.service";
 import { calculateFare } from "./utils/fare-calculator";
+import { RefundService } from "../payment/refund.service";
 
 
 /*
@@ -168,11 +169,21 @@ function buildTimeoutStub() {
     };
 }
 
+function buildRefundStub() {
+    return {
+        createRefundForRide: jest.fn().mockResolvedValue(null),
+        processRefundJob: jest.fn().mockResolvedValue(undefined),
+        getRefundForRide: jest.fn().mockResolvedValue(null),
+        getRefundById: jest.fn().mockResolvedValue(null),
+    };
+}
+
 async function buildService(
     prismaStub: ReturnType<typeof buildPrismaStub>,
     gatewayStub = buildGatewayStub(),
     routingStub = buildRoutingStub(),
     timeoutStub = buildTimeoutStub(),
+    refundStub = buildRefundStub(),
 ): Promise<RidesService> {
     const module: TestingModule = await Test.createTestingModule({
         providers: [
@@ -181,6 +192,7 @@ async function buildService(
             { provide: RidesGateway, useValue: gatewayStub },
             { provide: RoutingService, useValue: routingStub },
             { provide: RideTimeoutService, useValue: timeoutStub },
+            { provide: RefundService, useValue: refundStub },
         ],
     }).compile();
 

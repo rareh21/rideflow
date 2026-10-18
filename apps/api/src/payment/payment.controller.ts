@@ -9,6 +9,7 @@ import {
 import { UserRole } from "@prisma/client";
 
 import { PaymentService } from "./payment.service";
+import { RefundService } from "./refund.service";
 import { ProcessPaymentDto } from "./dto/process-payment.dto";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -20,7 +21,10 @@ import type { AuthUser } from "../auth/types/auth-user.type";
 @Controller("payments")
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PaymentController {
-    constructor(private readonly paymentService: PaymentService) { }
+    constructor(
+        private readonly paymentService: PaymentService,
+        private readonly refundService: RefundService,
+    ) { }
 
     @Post("ride/:rideId")
     @Roles(UserRole.RIDER)
@@ -35,7 +39,7 @@ export class PaymentController {
     }
 
     @Get("ride/:rideId")
-    @Roles(UserRole.RIDER, UserRole.DRIVER)
+    @Roles(UserRole.RIDER, UserRole.DRIVER, UserRole.ADMIN)
     getPaymentForRide(
         @Param("rideId") rideId: string,
         @CurrentUser() user: AuthUser,
@@ -46,14 +50,40 @@ export class PaymentController {
         );
     }
 
+    @Get("ride/:rideId/refund")
+    @Roles(UserRole.RIDER, UserRole.DRIVER, UserRole.ADMIN)
+    getRefundForRide(
+        @Param("rideId") rideId: string,
+        @CurrentUser() user: AuthUser,
+    ) {
+        return this.refundService.getRefundForRide(
+            rideId,
+            user.userId,
+            user.role as UserRole,
+        );
+    }
+
     @Get("me")
     @Roles(UserRole.RIDER)
     getMyPayments(@CurrentUser() user: AuthUser) {
         return this.paymentService.getMyPayments(user.userId);
     }
 
+    @Get(":id/refund")
+    @Roles(UserRole.RIDER, UserRole.DRIVER, UserRole.ADMIN)
+    getRefundById(
+        @Param("id") id: string,
+        @CurrentUser() user: AuthUser,
+    ) {
+        return this.refundService.getRefundById(
+            id,
+            user.userId,
+            user.role as UserRole,
+        );
+    }
+
     @Get(":id")
-    @Roles(UserRole.RIDER)
+    @Roles(UserRole.RIDER, UserRole.ADMIN)
     getPaymentById(
         @Param("id") id: string,
         @CurrentUser() user: AuthUser,

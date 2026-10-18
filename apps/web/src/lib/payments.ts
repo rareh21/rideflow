@@ -22,6 +22,27 @@ export type Payment = {
     updatedAt: string;
 };
 
+export type RefundStatus =
+    | "PENDING"
+    | "PROCESSING"
+    | "SUCCEEDED"
+    | "FAILED";
+
+export type Refund = {
+    id: string;
+    rideId: string;
+    paymentId: string;
+    userId: string;
+    amount: number;
+    currency: string;
+    status: RefundStatus;
+    reason?: string | null;
+    failureReason?: string | null;
+    createdAt: string;
+    updatedAt: string;
+    completedAt?: string | null;
+};
+
 export type ProcessPaymentPayload = {
     simulateResult?: "success" | "failure";
 };
@@ -68,4 +89,26 @@ export async function processPayment(
         method: "POST",
         body: payload ? JSON.stringify(payload) : undefined,
     });
+}
+
+/**
+ * Retrieves sanitized refund details for a specific ride.
+ */
+export async function getRideRefund(rideId: string): Promise<Refund | null> {
+    try {
+        return await api<Refund>(`/rides/${rideId}/refund`);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Retrieves sanitized refund details by payment ID.
+ */
+export async function getPaymentRefund(paymentId: string): Promise<Refund | null> {
+    try {
+        return await api<Refund>(`/payments/${paymentId}/refund`);
+    } catch {
+        return null;
+    }
 }

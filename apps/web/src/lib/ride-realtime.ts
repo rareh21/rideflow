@@ -30,6 +30,25 @@ export type RideRequestRemovedEvent = {
     rideId: string;
 };
 
+export type RefundUpdatedEvent = {
+    refundId: string;
+    rideId: string;
+    paymentId: string;
+    status: "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED";
+    amount: number;
+    currency: string;
+    failureReason?: string | null;
+};
+
+export type RideCancelledEvent = {
+    rideId: string;
+    cancellationReason?: string | null;
+    cancellationNote?: string | null;
+    cancelledAt: string;
+    cancelledById?: string | null;
+    refund?: unknown;
+};
+
 /**
  * REST mutations remain authoritative. This subscription only reflects a committed
  * ride change sent to the authenticated rider and assigned driver private rooms.
@@ -171,4 +190,35 @@ export function subscribeToDriverLocationUpdates(
         socket.disconnect();
     };
 }
+
+export function subscribeToRefundUpdates(
+    onUpdate: (event: RefundUpdatedEvent) => void,
+    onConnected?: () => void,
+) {
+    const token = sessionStorage.getItem("accessToken");
+
+    if (!token) {
+        return () => undefined;
+    }
+
+    const socket = io(REALTIME_URL, {
+        auth: { token },
+        transports: ["websocket"],
+    });
+
+    socket.on("refund.updated", onUpdate);
+
+    if (onConnected) {
+        socket.on("connect", onConnected);
+    }
+
+    return () => {
+        socket.off("refund.updated", onUpdate);
+        if (onConnected) {
+            socket.off("connect", onConnected);
+        }
+        socket.disconnect();
+    };
+}
+
 

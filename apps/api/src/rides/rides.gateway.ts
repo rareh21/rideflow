@@ -172,4 +172,46 @@ export class RidesGateway
             payload,
         );
     }
+
+    emitRideCancelled(
+        riderUserId: string,
+        driverUserId: string | null,
+        payload: {
+            rideId: string;
+            cancellationReason?: string | null;
+            cancellationNote?: string | null;
+            cancelledAt: Date;
+            cancelledById?: string | null;
+            refund?: unknown;
+        },
+    ) {
+        const userIds = [riderUserId, driverUserId].filter(
+            (id): id is string => Boolean(id),
+        );
+
+        this.emitToUsers(userIds, "ride.cancelled", payload);
+
+        this.server.to("drivers").emit("ride.request.removed", {
+            rideId: payload.rideId,
+        });
+        this.server.to("drivers").emit("ride.requests.changed", {
+            rideId: payload.rideId,
+        });
+    }
+
+    emitRefundUpdated(
+        userId: string,
+        payload: {
+            refundId: string;
+            rideId: string;
+            paymentId: string;
+            status: string;
+            amount: number;
+            currency: string;
+            failureReason?: string | null;
+        },
+    ) {
+        this.emitToUser(userId, "refund.updated", payload);
+    }
 }
+
