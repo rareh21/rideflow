@@ -5,6 +5,7 @@ import {
     Param,
     Patch,
     Post,
+    Query,
     UseGuards,
 } from "@nestjs/common";
 
@@ -15,6 +16,7 @@ import { CreateRideDto } from "./dto/create-ride.dto";
 import { CreateRideQuoteDto } from "./dto/create-ride-quote.dto";
 import { CreateRoutePreviewDto } from "./dto/create-route-preview.dto";
 import { CreateRideReviewDto } from "./dto/create-ride-review.dto";
+import { RideHistoryQueryDto } from "./dto/ride-history-query.dto";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -83,6 +85,30 @@ export class RidesController {
     ) {
         return this.ridesService.getMyRides(
             user.userId,
+        );
+    }
+
+    @Get("my/history")
+    @Roles(UserRole.RIDER)
+    getMyRideHistory(
+        @CurrentUser() user: AuthUser,
+        @Query() query: RideHistoryQueryDto,
+    ) {
+        return this.ridesService.getRiderRideHistory(
+            user.userId,
+            query,
+        );
+    }
+
+    @Get("driver/my/history")
+    @Roles(UserRole.DRIVER)
+    getDriverRideHistory(
+        @CurrentUser() user: AuthUser,
+        @Query() query: RideHistoryQueryDto,
+    ) {
+        return this.ridesService.getDriverRideHistory(
+            user.userId,
+            query,
         );
     }
 

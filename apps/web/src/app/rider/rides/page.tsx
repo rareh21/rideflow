@@ -121,19 +121,28 @@ export default function RiderRidesPage() {
     return (
         <main className="min-h-full bg-[var(--rf-surface-muted)]">
             <div className="mx-auto max-w-4xl px-4 py-8 pb-28 sm:px-6 lg:py-10 lg:pb-10">
-                <header>
-                    <p className="text-xs font-bold uppercase tracking-wider text-[var(--rf-green-dark)]">
-                        Rider
-                    </p>
+                <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <p className="text-xs font-bold uppercase tracking-wider text-[var(--rf-green-dark)]">
+                            Rider
+                        </p>
 
-                    <h1 className="mt-2 text-2xl font-bold tracking-tight text-[var(--rf-midnight)] sm:text-3xl">
-                        My rides
-                    </h1>
+                        <h1 className="mt-2 text-2xl font-bold tracking-tight text-[var(--rf-midnight)] sm:text-3xl">
+                            My rides
+                        </h1>
 
-                    <p className="mt-2 text-sm text-[var(--rf-muted)]">
-                        View your recent and
-                        ongoing RideFlow trips.
-                    </p>
+                        <p className="mt-2 text-sm text-[var(--rf-muted)]">
+                            View your recent and ongoing RideFlow trips.
+                        </p>
+                    </div>
+
+                    <Link
+                        href="/rider/rides/history"
+                        className="inline-flex items-center gap-2 rounded-2xl border border-[var(--rf-border)] bg-white px-4 py-2.5 text-xs font-bold text-[var(--rf-midnight)] shadow-xs transition hover:bg-gray-50"
+                    >
+                        Ride History & Search
+                        <ArrowRight size={14} className="text-[var(--rf-green-dark)]" />
+                    </Link>
                 </header>
 
                 {loading && (

@@ -315,11 +315,20 @@ function DriverRidesContent() {
                             </h1>
                         </div>
 
-                        {driverVehicleType && (
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--rf-green)]/10 px-3.5 py-1.5 text-xs font-bold text-[var(--rf-green-dark)]">
-                                Vehicle Tier: {driverVehicleType}
-                            </span>
-                        )}
+                        <div className="flex items-center gap-3">
+                            {driverVehicleType && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--rf-green)]/10 px-3.5 py-1.5 text-xs font-bold text-[var(--rf-green-dark)]">
+                                    Vehicle Tier: {driverVehicleType}
+                                </span>
+                            )}
+                            <Link
+                                href="/driver/rides/history"
+                                className="inline-flex items-center gap-2 rounded-2xl border border-[var(--rf-border)] bg-white px-4 py-2.5 text-xs font-bold text-[var(--rf-midnight)] shadow-xs transition hover:bg-gray-50"
+                            >
+                                Ride History
+                                <ArrowRight size={14} className="text-[var(--rf-green-dark)]" />
+                            </Link>
+                        </div>
                     </div>
                 </header>
 

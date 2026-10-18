@@ -5,6 +5,7 @@ import {
 import {
     Car,
     CreditCard,
+    History,
     LayoutDashboard,
     MapPin,
     ShieldCheck,
@@ -33,6 +34,13 @@ export const RIDER_NAVIGATION: NavigationItem[] = [
         label: "My Rides",
         href: "/rider/rides",
         icon: Car,
+        permission:
+            Permissions.RIDER_RIDE_VIEW,
+    },
+    {
+        label: "Ride History",
+        href: "/rider/rides/history",
+        icon: History,
         permission:
             Permissions.RIDER_RIDE_VIEW,
     },
@@ -72,6 +80,14 @@ export const DRIVER_NAVIGATION: NavigationItem[] = [
         label: "Rides",
         href: "/driver/rides",
         icon: Car,
+        permission:
+            Permissions.DRIVER_RIDE_VIEW,
+        mobile: true
+    },
+    {
+        label: "Ride History",
+        href: "/driver/rides/history",
+        icon: History,
         permission:
             Permissions.DRIVER_RIDE_VIEW,
         mobile: true

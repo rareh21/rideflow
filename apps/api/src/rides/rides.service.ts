@@ -17,6 +17,7 @@ import { CreateRideDto } from "./dto/create-ride.dto";
 import { CreateRideQuoteDto } from "./dto/create-ride-quote.dto";
 import { CreateRoutePreviewDto } from "./dto/create-route-preview.dto";
 import { CreateRideReviewDto } from "./dto/create-ride-review.dto";
+import { RideHistoryQueryDto } from "./dto/ride-history-query.dto";
 import { RidesGateway } from "./rides.gateway";
 import { RideTimeoutService } from "./ride-timeout.service";
 import { canTransitionRideStatus } from "./ride-status";
@@ -474,6 +475,308 @@ export class RidesService {
                 },
             },
         });
+    }
+
+    async getRiderRideHistory(
+        riderId: string,
+        query: RideHistoryQueryDto,
+    ) {
+        const { where, page, limit, skip } = this.buildRideHistoryFilter(
+            { riderId },
+            query,
+        );
+
+        const [total, items] = await Promise.all([
+            this.prisma.ride.count({ where }),
+            this.prisma.ride.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: [
+                    { createdAt: "desc" },
+                    { id: "desc" },
+                ],
+                include: {
+                    pickupLocation: true,
+                    destinationLocation: true,
+                    driver: {
+                        select: {
+                            id: true,
+                            status: true,
+                            user: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                },
+                            },
+                            vehicle: {
+                                select: {
+                                    make: true,
+                                    model: true,
+                                    year: true,
+                                    plateNumber: true,
+                                },
+                            },
+                        },
+                    },
+                    payment: {
+                        select: {
+                            id: true,
+                            amount: true,
+                            currency: true,
+                            method: true,
+                            status: true,
+                        },
+                    },
+                    reviews: {
+                        select: {
+                            id: true,
+                            rating: true,
+                            comment: true,
+                            reviewerId: true,
+                            revieweeId: true,
+                        },
+                    },
+                },
+            }),
+        ]);
+
+        const totalPages = Math.ceil(total / limit) || 1;
+
+        return {
+            items: items.map((ride) => this.mapRideHistoryItem(ride)),
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages,
+                hasPreviousPage: page > 1,
+                hasNextPage: page < totalPages,
+            },
+        };
+    }
+
+    async getDriverRideHistory(
+        userId: string,
+        query: RideHistoryQueryDto,
+    ) {
+        const driver = await this.prisma.driver.findUnique({
+            where: { userId },
+            select: { id: true },
+        });
+
+        if (!driver) {
+            throw new NotFoundException("Driver profile not found");
+        }
+
+        const { where, page, limit, skip } = this.buildRideHistoryFilter(
+            { driverId: driver.id },
+            query,
+        );
+
+        const [total, items] = await Promise.all([
+            this.prisma.ride.count({ where }),
+            this.prisma.ride.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: [
+                    { createdAt: "desc" },
+                    { id: "desc" },
+                ],
+                include: {
+                    pickupLocation: true,
+                    destinationLocation: true,
+                    rider: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                        },
+                    },
+                    driver: {
+                        select: {
+                            id: true,
+                            status: true,
+                            user: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                },
+                            },
+                            vehicle: {
+                                select: {
+                                    make: true,
+                                    model: true,
+                                    year: true,
+                                    plateNumber: true,
+                                },
+                            },
+                        },
+                    },
+                    payment: {
+                        select: {
+                            id: true,
+                            amount: true,
+                            currency: true,
+                            method: true,
+                            status: true,
+                        },
+                    },
+                    reviews: {
+                        select: {
+                            id: true,
+                            rating: true,
+                            comment: true,
+                            reviewerId: true,
+                            revieweeId: true,
+                        },
+                    },
+                },
+            }),
+        ]);
+
+        const totalPages = Math.ceil(total / limit) || 1;
+
+        return {
+            items: items.map((ride) => this.mapRideHistoryItem(ride)),
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages,
+                hasPreviousPage: page > 1,
+                hasNextPage: page < totalPages,
+            },
+        };
+    }
+
+    private buildRideHistoryFilter(
+        baseScope: Prisma.RideWhereInput,
+        query: RideHistoryQueryDto,
+    ) {
+        const page = Math.max(1, query.page ?? 1);
+        const limit = Math.min(50, Math.max(1, query.limit ?? 10));
+        const skip = (page - 1) * limit;
+
+        const where: Prisma.RideWhereInput = {
+            ...baseScope,
+        };
+
+        if (query.status) {
+            where.status = query.status;
+        }
+
+        if (query.search?.trim()) {
+            where.id = {
+                contains: query.search.trim(),
+                mode: "insensitive",
+            };
+        }
+
+        if (query.startDate || query.endDate) {
+            const createdAtFilter: Prisma.DateTimeFilter = {};
+
+            if (query.startDate) {
+                const start = new Date(query.startDate);
+                if (isNaN(start.getTime())) {
+                    throw new BadRequestException("Invalid startDate format");
+                }
+                createdAtFilter.gte = start;
+            }
+
+            if (query.endDate) {
+                const end = new Date(query.endDate);
+                if (isNaN(end.getTime())) {
+                    throw new BadRequestException("Invalid endDate format");
+                }
+                createdAtFilter.lte = end;
+            }
+
+            if (
+                createdAtFilter.gte &&
+                createdAtFilter.lte &&
+                createdAtFilter.gte > createdAtFilter.lte
+            ) {
+                throw new BadRequestException("startDate must be earlier than or equal to endDate");
+            }
+
+            where.createdAt = createdAtFilter;
+        }
+
+        return { where, page, limit, skip };
+    }
+
+    private mapRideHistoryItem(ride: any) {
+        return {
+            id: ride.id,
+            riderId: ride.riderId,
+            driverId: ride.driverId,
+            rideType: ride.rideType,
+            status: ride.status,
+            estimatedFare: Number(ride.estimatedFare),
+            estimatedDistanceKm: Number(ride.estimatedDistanceKm),
+            estimatedDurationMinutes: ride.estimatedDurationMinutes,
+            paymentMethod: ride.paymentMethod,
+            pickupLocation: {
+                id: ride.pickupLocation.id,
+                label: ride.pickupLocation.label,
+                latitude: Number(ride.pickupLocation.latitude),
+                longitude: Number(ride.pickupLocation.longitude),
+            },
+            destinationLocation: {
+                id: ride.destinationLocation.id,
+                label: ride.destinationLocation.label,
+                latitude: Number(ride.destinationLocation.latitude),
+                longitude: Number(ride.destinationLocation.longitude),
+            },
+            driver: ride.driver
+                ? {
+                    id: ride.driver.id,
+                    status: ride.driver.status,
+                    user: {
+                        id: ride.driver.user.id,
+                        name: ride.driver.user.name,
+                    },
+                    vehicle: ride.driver.vehicle
+                        ? {
+                            make: ride.driver.vehicle.make,
+                            model: ride.driver.vehicle.model,
+                            year: ride.driver.vehicle.year,
+                            plateNumber: ride.driver.vehicle.plateNumber,
+                        }
+                        : null,
+                }
+                : null,
+            rider: ride.rider
+                ? {
+                    id: ride.rider.id,
+                    name: ride.rider.name,
+                    email: ride.rider.email,
+                }
+                : undefined,
+            payment: ride.payment
+                ? {
+                    id: ride.payment.id,
+                    amount: Number(ride.payment.amount),
+                    currency: ride.payment.currency,
+                    method: ride.payment.method,
+                    status: ride.payment.status,
+                }
+                : null,
+            reviews: Array.isArray(ride.reviews)
+                ? ride.reviews.map((r: any) => ({
+                    id: r.id,
+                    rating: r.rating,
+                    comment: r.comment,
+                    reviewerId: r.reviewerId,
+                    revieweeId: r.revieweeId,
+                }))
+                : [],
+            createdAt: ride.createdAt,
+            updatedAt: ride.updatedAt,
+            completedAt: ride.completedAt ?? null,
+        };
     }
 
     async updateStatus(
