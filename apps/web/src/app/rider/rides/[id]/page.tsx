@@ -24,7 +24,7 @@ import {
     type Ride,
     type RideReceiptData,
 } from "@/lib/rides";
-import { subscribeToRideUpdates, subscribeToRefundUpdates } from "@/lib/ride-realtime";
+import { subscribeToRideUpdates, subscribeToRefundUpdates, subscribeToRideCancelled } from "@/lib/ride-realtime";
 
 import { Button } from "@/components/ui/button";
 import { RouteMap } from "@/components/route-map";
@@ -223,9 +223,17 @@ export default function RideDetailsPage() {
             }
         });
 
+        const unsubscribeCancel = subscribeToRideCancelled((event) => {
+            if (event.rideId === rideId) {
+                void loadRide(false);
+                void getRideRefund(rideId).then(setRefund).catch(() => {});
+            }
+        });
+
         return () => {
             unsubscribeRide();
             unsubscribeRefund();
+            unsubscribeCancel();
         };
     }, [rideId, refetchTrackingLocation]);
 

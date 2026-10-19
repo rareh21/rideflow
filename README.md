@@ -182,6 +182,7 @@ rideflow/
 * [x] Fare calculation
 * [x] Payment integration
 * [x] Transaction management
+* [x] Cancellation refunds & durable processing
 * [ ] Driver earnings
 * [x] Payment history
 

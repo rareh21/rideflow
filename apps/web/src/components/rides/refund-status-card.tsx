@@ -149,6 +149,7 @@ export function RefundStatusCard({
                                     </div>
                                     <p className="mt-0.5 text-xs text-[var(--rf-muted)]">
                                         {statusBadge.description}
+                                        {paymentMethod && ` (${paymentMethod})`}
                                     </p>
                                     {formattedCompletedDate && (
                                         <p className="mt-1 text-[11px] text-[var(--rf-green-dark)] font-medium">

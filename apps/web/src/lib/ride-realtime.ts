@@ -221,4 +221,34 @@ export function subscribeToRefundUpdates(
     };
 }
 
+export function subscribeToRideCancelled(
+    onCancelled: (event: RideCancelledEvent) => void,
+    onConnected?: () => void,
+) {
+    const token = sessionStorage.getItem("accessToken");
+
+    if (!token) {
+        return () => undefined;
+    }
+
+    const socket = io(REALTIME_URL, {
+        auth: { token },
+        transports: ["websocket"],
+    });
+
+    socket.on("ride.cancelled", onCancelled);
+
+    if (onConnected) {
+        socket.on("connect", onConnected);
+    }
+
+    return () => {
+        socket.off("ride.cancelled", onCancelled);
+        if (onConnected) {
+            socket.off("connect", onConnected);
+        }
+        socket.disconnect();
+    };
+}
+
 
