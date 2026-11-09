@@ -72,8 +72,9 @@ function buildPrismaStub() {
                 const list = Object.values(paymentStore).filter((p) => p.userId === where.userId);
                 return Promise.resolve(list);
             }),
-            update: jest.fn().mockImplementation(({ where, data }: { where: { id: string }; data: any }) => {
-                const record = paymentStore[where.id];
+            update: jest.fn().mockImplementation(({ where, data }: { where: { id?: string; rideId?: string }; data: any }) => {
+                const key = where.rideId || where.id;
+                const record = paymentStore[key];
                 if (!record) return Promise.resolve(null);
                 Object.assign(record, data, { updatedAt: new Date() });
                 return Promise.resolve(record);
@@ -251,6 +252,63 @@ describe("PaymentService", () => {
             await expect(
                 service.processPayment(cashPayment.id, RIDER_ID),
             ).rejects.toThrow(BadRequestException);
+        });
+    });
+
+    describe("addTipForRide", () => {
+        beforeEach(async () => {
+            // Seed a succeeded payment for RIDE_ID
+            await service.createPaymentForRide(RIDE_ID, RIDER_ID);
+        });
+
+        it("successfully adds a tip to a completed ride payment", async () => {
+            const updated = await service.addTipForRide(RIDE_ID, RIDER_ID, 50);
+
+            expect(updated).toBeDefined();
+            expect(updated.amount).toBe(245);
+            expect(updated.tipAmount).toBe(50);
+            expect(updated.totalAmount).toBe(295);
+        });
+
+        it("accumulates multiple tips correctly", async () => {
+            await service.addTipForRide(RIDE_ID, RIDER_ID, 30);
+            const secondTip = await service.addTipForRide(RIDE_ID, RIDER_ID, 20);
+
+            expect(secondTip.tipAmount).toBe(50);
+            expect(secondTip.totalAmount).toBe(295);
+        });
+
+        it("rejects non-positive tip amount", async () => {
+            await expect(
+                service.addTipForRide(RIDE_ID, RIDER_ID, 0),
+            ).rejects.toThrow(BadRequestException);
+
+            await expect(
+                service.addTipForRide(RIDE_ID, RIDER_ID, -10),
+            ).rejects.toThrow(BadRequestException);
+        });
+
+        it("prevents non-owner rider from adding a tip", async () => {
+            await expect(
+                service.addTipForRide(RIDE_ID, OTHER_RIDER_ID, 50),
+            ).rejects.toThrow(ForbiddenException);
+        });
+
+        it("rejects tip if ride is not completed", async () => {
+            prisma.ride.findUnique.mockResolvedValueOnce({
+                ...MOCK_RIDE,
+                status: "IN_PROGRESS",
+            });
+
+            await expect(
+                service.addTipForRide(RIDE_ID, RIDER_ID, 50),
+            ).rejects.toThrow(BadRequestException);
+        });
+
+        it("throws NotFoundException if ride does not exist", async () => {
+            await expect(
+                service.addTipForRide("unknown-ride", RIDER_ID, 50),
+            ).rejects.toThrow(NotFoundException);
         });
     });
 });

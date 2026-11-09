@@ -13,6 +13,8 @@ export type Payment = {
     rideId: string;
     userId: string;
     amount: number;
+    tipAmount?: number;
+    totalAmount?: number;
     currency: string;
     method: PaymentMethod;
     status: PaymentStatus;
@@ -111,4 +113,13 @@ export async function getPaymentRefund(paymentId: string): Promise<Refund | null
     } catch {
         return null;
     }
+}
+/**
+ * Adds an in-app tip to a completed ride payment.
+ */
+export async function addRideTip(rideId: string, amount: number): Promise<Payment> {
+    return api<Payment>(`/payments/ride/${rideId}/tip`, {
+        method: "POST",
+        body: JSON.stringify({ amount }),
+    });
 }

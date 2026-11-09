@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Payment" ADD COLUMN "tipAmount" DECIMAL(65,30) NOT NULL DEFAULT 0;

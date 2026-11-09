@@ -4,8 +4,11 @@ import {
     Inject,
     Injectable,
     NotFoundException,
+    Optional,
+    forwardRef,
 } from "@nestjs/common";
-import { PaymentMethod, PaymentStatus } from "@prisma/client";
+import { PaymentMethod, PaymentStatus, Prisma } from "@prisma/client";
+import { RidesGateway } from "../rides/rides.gateway";
 
 import { PrismaService } from "../prisma/prisma.service";
 import type { PaymentProvider } from "./providers/payment-provider.interface";
@@ -17,6 +20,8 @@ export type SanitizedPayment = {
     rideId: string;
     userId: string;
     amount: number;
+    tipAmount: number;
+    totalAmount: number;
     currency: string;
     method: PaymentMethod;
     status: PaymentStatus;
@@ -32,6 +37,9 @@ export class PaymentService {
         private readonly prisma: PrismaService,
         @Inject(PAYMENT_PROVIDER)
         private readonly paymentProvider: PaymentProvider,
+        @Optional()
+        @Inject(forwardRef(() => RidesGateway))
+        private readonly ridesGateway?: RidesGateway,
     ) { }
 
     /**
@@ -264,11 +272,98 @@ export class PaymentService {
         return this.sanitizePayment(updated);
     }
 
+    /**
+     * Adds an in-app tip to a completed ride payment.
+     * Only the owning rider can add a tip.
+     * Ride must be COMPLETED and payment must be SUCCEEDED.
+     * Emits real-time notification to the driver.
+     */
+    async addTipForRide(
+        rideId: string,
+        authenticatedUserId: string,
+        tipAmount: number,
+    ): Promise<SanitizedPayment> {
+        if (!tipAmount || tipAmount <= 0) {
+            throw new BadRequestException("Tip amount must be greater than zero");
+        }
+
+        const ride = await this.prisma.ride.findUnique({
+            where: { id: rideId },
+            include: {
+                driver: {
+                    include: {
+                        user: true,
+                    },
+                },
+            },
+        });
+
+        if (!ride) {
+            throw new NotFoundException("Ride not found");
+        }
+
+        if (ride.riderId !== authenticatedUserId) {
+            throw new ForbiddenException("You can only add a tip for your own ride");
+        }
+
+        if (ride.status !== "COMPLETED") {
+            throw new BadRequestException("Tip can only be added to completed rides");
+        }
+
+        const payment = await this.prisma.payment.findUnique({
+            where: { rideId },
+        });
+
+        if (!payment) {
+            throw new NotFoundException("Payment record not found for this ride");
+        }
+
+        if (payment.status !== PaymentStatus.SUCCEEDED) {
+            throw new BadRequestException("Payment must be completed before adding a tip");
+        }
+
+        const currentTip = Number(payment.tipAmount ?? 0);
+        const newTip = Number((currentTip + tipAmount).toFixed(2));
+
+        const updatedPayment = await this.prisma.payment.update({
+            where: { rideId },
+            data: {
+                tipAmount: new Prisma.Decimal(newTip),
+            },
+        });
+
+        const sanitized = this.sanitizePayment(updatedPayment);
+
+        if (this.ridesGateway) {
+            if (ride.driver?.user?.id) {
+                this.ridesGateway.emitToUser(
+                    ride.driver.user.id,
+                    "payment:tip_received",
+                    {
+                        rideId: ride.id,
+                        tipAmount,
+                        totalTipAmount: newTip,
+                        totalFareWithTip: sanitized.totalAmount,
+                        currency: payment.currency,
+                    },
+                );
+            }
+            this.ridesGateway.emitToUser(
+                authenticatedUserId,
+                "payment:updated",
+                sanitized,
+            );
+        }
+
+        return sanitized;
+    }
+
     private sanitizePayment(payment: {
         id: string;
         rideId: string;
         userId: string;
         amount: unknown;
+        tipAmount?: unknown;
         currency: string;
         method: PaymentMethod;
         status: PaymentStatus;
@@ -277,11 +372,15 @@ export class PaymentService {
         createdAt: Date;
         updatedAt: Date;
     }): SanitizedPayment {
+        const amount = Number(payment.amount);
+        const tipAmount = Number(payment.tipAmount ?? 0);
         return {
             id: payment.id,
             rideId: payment.rideId,
             userId: payment.userId,
-            amount: Number(payment.amount),
+            amount,
+            tipAmount,
+            totalAmount: Number((amount + tipAmount).toFixed(2)),
             currency: payment.currency,
             method: payment.method,
             status: payment.status,

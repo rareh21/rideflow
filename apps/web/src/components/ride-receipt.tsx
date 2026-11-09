@@ -1,6 +1,16 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, Clock, Loader2, MapPin, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import {
+    AlertCircle,
+    CheckCircle2,
+    Clock,
+    Heart,
+    Loader2,
+    MapPin,
+    RefreshCw,
+    Sparkles,
+} from "lucide-react";
 import type { PaymentMethod, RideLocation, RideType } from "@/lib/rides";
 import type { Payment } from "@/lib/payments";
 
@@ -16,9 +26,12 @@ export type RideReceiptProps = {
     payment?: Payment | null;
     completedAt?: string | Date | null;
     onRetryPayment?: () => void;
+    onAddTip?: (tipAmount: number) => Promise<void>;
     isProcessingPayment?: boolean;
     actions?: React.ReactNode;
 };
+
+const PRESET_TIPS = [20, 50, 100];
 
 export function RideReceipt({
     rideType,
@@ -31,14 +44,62 @@ export function RideReceipt({
     payment,
     completedAt,
     onRetryPayment,
+    onAddTip,
     isProcessingPayment = false,
     actions,
 }: RideReceiptProps) {
-    const formattedFare = typeof fare === "number" ? fare.toFixed(0) : fare;
-    const formattedDistance = typeof distanceKm === "number" ? distanceKm.toFixed(1) : distanceKm;
+    const [selectedTip, setSelectedTip] = useState<number | null>(null);
+    const [isCustomTip, setIsCustomTip] = useState(false);
+    const [customTipValue, setCustomTipValue] = useState("");
+    const [isSubmittingTip, setIsSubmittingTip] = useState(false);
+    const [tipError, setTipError] = useState<string | null>(null);
+    const [tipSuccess, setTipSuccess] = useState<string | null>(null);
+
+    const baseFareNumber = typeof fare === "number" ? fare : Number(fare) || 0;
+    const formattedFare = baseFareNumber.toFixed(0);
+    const formattedDistance =
+        typeof distanceKm === "number" ? distanceKm.toFixed(1) : distanceKm;
 
     const currentStatus = payment?.status ?? "PENDING";
     const currentMethod = payment?.method ?? paymentMethod ?? "UPI";
+    const currentTip = Number(payment?.tipAmount ?? 0);
+    const totalAmount = currentTip > 0 ? (baseFareNumber + currentTip).toFixed(0) : formattedFare;
+
+    const handleSelectPreset = (amount: number) => {
+        setIsCustomTip(false);
+        setTipError(null);
+        setSelectedTip(selectedTip === amount ? null : amount);
+    };
+
+    const handleSelectCustom = () => {
+        setIsCustomTip(true);
+        setSelectedTip(null);
+        setTipError(null);
+    };
+
+    const handleTipSubmit = async () => {
+        if (!onAddTip) return;
+
+        const tipToSubmit = isCustomTip ? Number(customTipValue) : selectedTip;
+        if (!tipToSubmit || tipToSubmit <= 0) {
+            setTipError("Please enter or select a valid tip amount.");
+            return;
+        }
+
+        try {
+            setIsSubmittingTip(true);
+            setTipError(null);
+            await onAddTip(tipToSubmit);
+            setTipSuccess(`Added ₹${tipToSubmit} tip to your driver!`);
+            setSelectedTip(null);
+            setIsCustomTip(false);
+            setCustomTipValue("");
+        } catch (err) {
+            setTipError(err instanceof Error ? err.message : "Failed to add tip. Please try again.");
+        } finally {
+            setIsSubmittingTip(false);
+        }
+    };
 
     return (
         <div className="w-full rounded-3xl border border-[var(--rf-border)] bg-[var(--rf-surface)] p-6 shadow-sm sm:p-8">
@@ -60,11 +121,16 @@ export function RideReceipt({
                 {/* Server Fare Display */}
                 <div className="mt-4">
                     <p className="text-xs font-semibold uppercase tracking-wider text-[var(--rf-muted)]">
-                        Total Amount
+                        Total Amount Paid
                     </p>
                     <p className="mt-1 text-3xl font-extrabold tracking-tight text-[var(--rf-midnight)]">
-                        ₹{formattedFare}
+                        ₹{totalAmount}
                     </p>
+                    {currentTip > 0 && (
+                        <p className="mt-1 text-xs text-[var(--rf-muted)]">
+                            Includes ₹{formattedFare} base fare + ₹{currentTip} driver tip
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -77,7 +143,7 @@ export function RideReceipt({
                             <div>
                                 <p className="font-bold">Payment successful</p>
                                 <p className="text-xs font-normal opacity-90">
-                                    ₹{formattedFare} paid via {currentMethod}
+                                    ₹{totalAmount} paid via {currentMethod}
                                     {payment?.provider === "mock" && " (Dev/Mock)"}
                                 </p>
                             </div>
@@ -166,6 +232,122 @@ export function RideReceipt({
                 )}
             </div>
 
+            {/* In-App Tipping Module (Rider View) */}
+            {onAddTip && currentStatus === "SUCCEEDED" && (
+                <div className="mt-6 rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/40 p-5">
+                    <div className="flex items-center gap-2 text-amber-900">
+                        <Heart size={18} className="fill-amber-500 text-amber-500" />
+                        <h3 className="text-sm font-bold">Add a Tip for Your Driver</h3>
+                    </div>
+                    <p className="mt-1 text-xs text-amber-800/80">
+                        100% of your tip goes directly to your driver. Thank them for a great trip!
+                    </p>
+
+                    {/* Active Tip or Preset Chips */}
+                    {currentTip > 0 ? (
+                        <div className="mt-4 flex items-center justify-between rounded-xl bg-white/80 p-3.5 border border-amber-200 text-sm font-semibold text-amber-900">
+                            <span className="flex items-center gap-2">
+                                <Sparkles size={16} className="text-amber-500" />
+                                Tip Added: ₹{currentTip}
+                            </span>
+                            <span className="text-xs text-amber-700 font-normal">
+                                Thank you for your support!
+                            </span>
+                        </div>
+                    ) : (
+                        <div className="mt-4 space-y-3">
+                            <div className="grid grid-cols-4 gap-2">
+                                {PRESET_TIPS.map((amount) => (
+                                    <button
+                                        key={amount}
+                                        type="button"
+                                        disabled={isSubmittingTip}
+                                        onClick={() => handleSelectPreset(amount)}
+                                        className={`rounded-xl py-2.5 text-xs font-bold transition ${
+                                            selectedTip === amount && !isCustomTip
+                                                ? "bg-amber-600 text-white shadow-sm"
+                                                : "bg-white text-gray-800 border border-amber-200 hover:border-amber-400"
+                                        }`}
+                                    >
+                                        ₹{amount}
+                                    </button>
+                                ))}
+                                <button
+                                    type="button"
+                                    disabled={isSubmittingTip}
+                                    onClick={handleSelectCustom}
+                                    className={`rounded-xl py-2.5 text-xs font-bold transition ${
+                                        isCustomTip
+                                            ? "bg-amber-600 text-white shadow-sm"
+                                            : "bg-white text-gray-800 border border-amber-200 hover:border-amber-400"
+                                    }`}
+                                >
+                                    Custom
+                                </button>
+                            </div>
+
+                            {/* Custom Tip Input */}
+                            {isCustomTip && (
+                                <div className="flex items-center gap-2 pt-1">
+                                    <span className="text-sm font-bold text-gray-600">₹</span>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="5000"
+                                        placeholder="Enter tip amount"
+                                        value={customTipValue}
+                                        onChange={(e) => setCustomTipValue(e.target.value)}
+                                        className="h-10 flex-1 rounded-xl border border-amber-300 bg-white px-3 text-sm font-bold text-gray-900 placeholder:font-normal focus:border-amber-600 focus:outline-none"
+                                    />
+                                </div>
+                            )}
+
+                            {tipError && (
+                                <p className="text-xs font-semibold text-red-600">{tipError}</p>
+                            )}
+
+                            {tipSuccess && (
+                                <p className="text-xs font-semibold text-green-700">{tipSuccess}</p>
+                            )}
+
+                            {(selectedTip !== null || (isCustomTip && customTipValue)) && (
+                                <button
+                                    type="button"
+                                    disabled={isSubmittingTip}
+                                    onClick={handleTipSubmit}
+                                    className="flex w-full min-h-10 items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-4 text-xs font-bold text-white transition hover:bg-amber-700 disabled:opacity-50"
+                                >
+                                    {isSubmittingTip ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                        <Heart size={14} className="fill-white" />
+                                    )}
+                                    Send ₹{isCustomTip ? customTipValue || 0 : selectedTip} Tip
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Driver Tip Notification (Driver View) */}
+            {!onAddTip && currentTip > 0 && (
+                <div className="mt-6 flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm font-semibold text-amber-900">
+                    <div className="flex items-center gap-2.5">
+                        <Sparkles size={18} className="text-amber-600" />
+                        <div>
+                            <p className="font-bold">Rider Tip Received</p>
+                            <p className="text-xs font-normal text-amber-700">
+                                You earned a ₹{currentTip} bonus tip from the rider on this trip!
+                            </p>
+                        </div>
+                    </div>
+                    <span className="rounded-lg bg-amber-200/80 px-2.5 py-1 text-xs font-bold text-amber-900">
+                        +₹{currentTip}
+                    </span>
+                </div>
+            )}
+
             {/* Pickup & Destination */}
             <div className="mt-6 space-y-3 rounded-2xl bg-[var(--rf-surface-muted)] p-5">
                 <div className="flex items-start gap-3">
@@ -195,7 +377,7 @@ export function RideReceipt({
                 </div>
             </div>
 
-            {/* Key Metrics: Distance, Duration, Payment */}
+            {/* Key Metrics: Distance, Duration, Method */}
             <div className="mt-5 grid grid-cols-3 gap-3 text-center">
                 <div className="rounded-2xl border border-[var(--rf-border)] bg-[var(--rf-surface)] p-3">
                     <p className="text-xs text-[var(--rf-muted)]">Distance</p>

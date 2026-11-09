@@ -41,6 +41,7 @@ import {
     getRidePayment,
     getRideRefund,
     processPayment,
+    addRideTip,
     type Payment,
     type Refund,
 } from "@/lib/payments";
@@ -122,6 +123,11 @@ export default function RideDetailsPage() {
         } finally {
             setProcessingPayment(false);
         }
+    }
+
+    async function handleAddTip(tipAmount: number) {
+        const updated = await addRideTip(rideId, tipAmount);
+        setPayment(updated);
     }
 
     async function loadRide(
@@ -351,6 +357,7 @@ export default function RideDetailsPage() {
                             paymentMethod={receipt?.paymentMethod ?? ride.paymentMethod}
                             payment={payment}
                             onRetryPayment={handleRetryPayment}
+                            onAddTip={handleAddTip}
                             isProcessingPayment={processingPayment}
                             completedAt={receipt?.completedAt ?? ride.completedAt ?? ride.updatedAt}
                             actions={

@@ -11,6 +11,7 @@ import { UserRole } from "@prisma/client";
 import { PaymentService } from "./payment.service";
 import { RefundService } from "./refund.service";
 import { ProcessPaymentDto } from "./dto/process-payment.dto";
+import { AddTipDto } from "./dto/add-tip.dto";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -91,6 +92,20 @@ export class PaymentController {
         return this.paymentService.getPaymentById(
             id,
             user.userId,
+        );
+    }
+
+    @Post("ride/:rideId/tip")
+    @Roles(UserRole.RIDER)
+    addTipForRide(
+        @Param("rideId") rideId: string,
+        @CurrentUser() user: AuthUser,
+        @Body() dto: AddTipDto,
+    ) {
+        return this.paymentService.addTipForRide(
+            rideId,
+            user.userId,
+            dto.amount,
         );
     }
 
