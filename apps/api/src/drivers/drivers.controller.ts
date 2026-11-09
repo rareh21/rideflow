@@ -73,7 +73,7 @@ export class DriversController {
     @Get("applications/:id")
     @Roles(UserRole.ADMIN)
     getApplicationById(@Param("id") id: string) {
-        return this.driversService.getApplication(id);
+        return this.driversService.getApplicationById(id);
     }
 
     @Patch("applications/:id/review")

@@ -93,6 +93,7 @@ export function DriverCurrentRideCard({
     const [showCompletionModal, setShowCompletionModal] = useState(false);
     const [completedSummary, setCompletedSummary] = useState<Ride | null>(null);
     const [completedReceipt, setCompletedReceipt] = useState<RideReceiptData | null>(null);
+    const [otpInput, setOtpInput] = useState("");
 
     const isTrackingActive =
         ride.status === "DRIVER_ASSIGNED" ||
@@ -131,14 +132,14 @@ export function DriverCurrentRideCard({
         navigateTarget,
     )}`;
 
-    async function handleStatusTransition(nextStatus: RideStatus) {
+    async function handleStatusTransition(nextStatus: RideStatus, otp?: string) {
         if (updating) return;
 
         try {
             setUpdating(true);
             setError(null);
 
-            const updated = await updateRideStatus(ride.id, nextStatus);
+            const updated = await updateRideStatus(ride.id, nextStatus, otp);
 
             if (nextStatus === "DRIVER_ARRIVING") {
                 setFeedback("Rider has been notified that you are on the way.");
@@ -412,24 +413,51 @@ export function DriverCurrentRideCard({
                 )}
 
                 {ride.status === "DRIVER_ARRIVED" && (
-                    <button
-                        type="button"
-                        disabled={updating}
-                        onClick={() => void handleStatusTransition("IN_PROGRESS")}
-                        className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--rf-green)] px-5 text-sm font-bold text-[var(--rf-midnight)] transition hover:bg-[var(--rf-green-dark)] disabled:opacity-60"
-                    >
-                        {updating ? (
-                            <>
-                                <Loader2 size={16} className="animate-spin" />
-                                Starting ride…
-                            </>
-                        ) : (
-                            <>
-                                <PlayCircle size={17} />
-                                Start Ride
-                            </>
-                        )}
-                    </button>
+                    <div className="flex flex-1 flex-col gap-2 rounded-2xl border-2 border-[var(--rf-green)]/40 bg-[var(--rf-green)]/5 p-3 sm:flex-row sm:items-center">
+                        <div className="flex-1">
+                            <p className="text-xs font-bold text-[var(--rf-midnight)]">
+                                Rider Pickup PIN
+                            </p>
+                            <p className="text-[11px] text-[var(--rf-muted)]">
+                                Ask rider for their 4-digit PIN to start
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                maxLength={4}
+                                value={otpInput}
+                                onChange={(e) => {
+                                    const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                                    setOtpInput(val);
+                                    setError(null);
+                                }}
+                                placeholder="4-digit PIN"
+                                aria-label="Rider 4-digit Pickup PIN"
+                                className="w-28 rounded-xl border border-[var(--rf-border)] bg-white px-3 py-2 text-center text-base font-bold tracking-widest text-[var(--rf-midnight)] focus:border-[var(--rf-green)] focus:outline-none"
+                            />
+                            <button
+                                type="button"
+                                disabled={updating || otpInput.trim().length !== 4}
+                                onClick={() => void handleStatusTransition("IN_PROGRESS", otpInput.trim())}
+                                className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--rf-green)] px-4 text-xs font-bold text-[var(--rf-midnight)] transition hover:bg-[var(--rf-green-dark)] disabled:opacity-50"
+                            >
+                                {updating ? (
+                                    <>
+                                        <Loader2 size={14} className="animate-spin" />
+                                        Verifying…
+                                    </>
+                                ) : (
+                                    <>
+                                        <PlayCircle size={15} />
+                                        Start Ride
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
                 )}
 
                 {ride.status === "IN_PROGRESS" && (

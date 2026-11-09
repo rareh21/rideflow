@@ -219,6 +219,7 @@ export class RidesController {
             rideId,
             user.userId,
             dto.status,
+            dto.otp,
         );
     }
 

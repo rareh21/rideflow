@@ -82,6 +82,7 @@ export type Ride = {
     cancellationReason?: string | null;
     cancellationNote?: string | null;
     cancelledById?: string | null;
+    pickupOtp?: string | null;
     refund?: {
         id: string;
         amount: number;
@@ -179,6 +180,7 @@ export async function getRide(
 export async function updateRideStatus(
     rideId: string,
     status: RideStatus,
+    otp?: string,
 ) {
     return api<Ride>(
         `/rides/${rideId}/status`,
@@ -186,6 +188,7 @@ export async function updateRideStatus(
             method: "PATCH",
             body: JSON.stringify({
                 status,
+                ...(otp ? { otp } : {}),
             }),
         },
     );

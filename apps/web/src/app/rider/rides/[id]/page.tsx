@@ -427,6 +427,39 @@ export default function RideDetailsPage() {
                     </div>
                 )}
 
+                {ride.pickupOtp && (ride.status === "DRIVER_ASSIGNED" || ride.status === "DRIVER_ARRIVING" || ride.status === "DRIVER_ARRIVED") && (
+                    <div className="mt-5 rounded-3xl border-2 border-[var(--rf-green)] bg-[var(--rf-green)]/10 p-5 sm:p-6 shadow-sm">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--rf-green)] text-[10px] font-black text-[var(--rf-midnight)]">
+                                        PIN
+                                    </span>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-[var(--rf-green-dark)]">
+                                        Pickup Verification PIN
+                                    </p>
+                                </div>
+                                <h3 className="mt-1 text-base font-bold text-[var(--rf-midnight)]">
+                                    Share this PIN with your driver
+                                </h3>
+                                <p className="text-xs text-[var(--rf-muted)] mt-0.5">
+                                    Your driver will ask for this 4-digit code before starting the trip.
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2 self-start sm:self-center">
+                                {ride.pickupOtp.split("").map((digit, idx) => (
+                                    <span
+                                        key={idx}
+                                        className="flex h-12 w-11 items-center justify-center rounded-2xl border-2 border-[var(--rf-green-dark)]/30 bg-white text-2xl font-black text-[var(--rf-midnight)] shadow-sm"
+                                    >
+                                        {digit}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {error && (
                     <div className="mt-5 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
                         <AlertCircle

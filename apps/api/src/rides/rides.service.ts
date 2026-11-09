@@ -41,22 +41,31 @@ export class RidesService {
         private readonly refundService: RefundService,
     ) { }
 
+    private generatePickupOtp(): string {
+        return Math.floor(1000 + Math.random() * 9000).toString();
+    }
+
     private emitRideUpdated(
         ride: {
             id: string;
             status: RideStatus;
             riderId: string;
+            pickupOtp?: string | null;
             driver?: {
                 userId?: string;
                 user?: { id: string };
             } | null;
+            [key: string]: any;
         },
     ) {
-        this.ridesGateway.emitRideUpdated(
-            ride.riderId,
+        const driverUserId =
             ride.driver?.userId ??
             ride.driver?.user?.id ??
-            null,
+            null;
+
+        this.ridesGateway.emitRideUpdated(
+            ride.riderId,
+            driverUserId,
             {
                 rideId: ride.id,
                 status: ride.status,
@@ -373,6 +382,13 @@ export class RidesService {
             throw new ForbiddenException(
                 "You do not have access to this ride",
             );
+        }
+
+        if (!isRider) {
+            return {
+                ...ride,
+                pickupOtp: null,
+            };
         }
 
         return ride;
@@ -942,6 +958,7 @@ export class RidesService {
         rideId: string,
         userId: string,
         nextStatus: RideStatus,
+        otp?: string,
     ) {
         const ride = await this.prisma.ride.findUnique({
             where: {
@@ -1015,6 +1032,14 @@ export class RidesService {
                 throw new ForbiddenException(
                     "Driver cannot perform this ride transition",
                 );
+            }
+
+            if (nextStatus === RideStatus.IN_PROGRESS && ride.pickupOtp) {
+                if (!otp || otp.trim() !== ride.pickupOtp) {
+                    throw new BadRequestException(
+                        "Invalid pickup verification PIN. Please ask the rider for the 4-digit code.",
+                    );
+                }
             }
         }
 
@@ -1309,6 +1334,8 @@ export class RidesService {
 
                             status:
                                 RideStatus.DRIVER_ASSIGNED,
+
+                            pickupOtp: this.generatePickupOtp(),
                         },
 
                         include: {
@@ -1481,6 +1508,7 @@ export class RidesService {
                         data: {
                             driverId: driver.id,
                             status: RideStatus.DRIVER_ASSIGNED,
+                            pickupOtp: this.generatePickupOtp(),
                         },
                     });
 
@@ -1628,7 +1656,14 @@ export class RidesService {
             },
         });
 
-        return currentRide ?? null;
+        if (currentRide) {
+            return {
+                ...currentRide,
+                pickupOtp: null,
+            };
+        }
+
+        return null;
     }
 
     async createReview(

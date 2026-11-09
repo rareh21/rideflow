@@ -125,24 +125,34 @@ export class RidesGateway
         driverUserId: string | null,
         payload: RideRealtimePayload,
     ) {
-        const userIds = [
-            riderUserId,
-            driverUserId,
-        ].filter(
-            (id): id is string => Boolean(id),
-        );
+        if (riderUserId) {
+            this.emitToUser(
+                riderUserId,
+                "ride.updated",
+                payload,
+            );
+        }
 
-        this.emitToUsers(
-            userIds,
-            "ride.updated",
-            payload,
-        );
+        if (driverUserId) {
+            const driverPayload = {
+                ...payload,
+                ride:
+                    payload.ride && typeof payload.ride === "object"
+                        ? { ...(payload.ride as Record<string, unknown>), pickupOtp: null }
+                        : payload.ride,
+            };
+            this.emitToUser(
+                driverUserId,
+                "ride.updated",
+                driverPayload,
+            );
+        }
 
         /*
          * Drivers re-fetch their request list after this lightweight signal.
          * We never broadcast a rider's full ride payload to every driver.
          */
-        this.server.to("drivers").emit(
+        this.server?.to("drivers")?.emit(
             "ride.requests.changed",
             { rideId: payload.rideId },
         );

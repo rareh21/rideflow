@@ -94,6 +94,38 @@ export class AuthService {
         };
     }
 
+    async getCurrentUser(userId: string) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+            },
+        });
+
+        if (!user) {
+            throw new UnauthorizedException("User not found");
+        }
+
+        const accessToken = await this.jwtService.signAsync({
+            sub: user.id,
+            role: user.role,
+        });
+
+        return {
+            user: {
+                userId: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+            },
+            accessToken,
+            message: "You are authenticated",
+        };
+    }
+
     async logout(userId: string) {
         await this.prisma.refreshToken.deleteMany({
             where: { userId },

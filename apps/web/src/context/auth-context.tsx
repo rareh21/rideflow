@@ -67,6 +67,13 @@ export function AuthProvider({
             const currentUser =
                 await getCurrentUser();
 
+            if (currentUser.accessToken) {
+                sessionStorage.setItem(
+                    "accessToken",
+                    currentUser.accessToken,
+                );
+            }
+
             setUser({
                 userId: currentUser.user.userId,
                 role: currentUser.user.role,

@@ -18,9 +18,11 @@ import {
 import type {
     DriverApplication,
 } from "@/lib/drivers";
+import { useAuth } from "@/context/auth-context";
 
 export default function DriverApplicationPage() {
     const router = useRouter();
+    const { refreshUser } = useAuth();
 
     const [application, setApplication] =
         useState<DriverApplication | null>(null);
@@ -383,17 +385,16 @@ export default function DriverApplicationPage() {
 
                             <p className="mt-2 text-sm leading-6 text-[var(--rf-muted)]">
                                 Your driver application has been
-                                approved. Continue onboarding to get
-                                ready for your first RideFlow trip.
+                                approved. Set up your vehicle to start
+                                receiving RideFlow trips.
                             </p>
 
                             <button
                                 type="button"
-                                onClick={() =>
-                                    router.push(
-                                        "/rider/driver-onboarding",
-                                    )
-                                }
+                                onClick={async () => {
+                                    await refreshUser();
+                                    router.push("/driver/vehicle");
+                                }}
                                 className="
                                     mt-6 flex min-h-14 w-full
                                     items-center justify-center
@@ -409,7 +410,7 @@ export default function DriverApplicationPage() {
                                     focus-visible:ring-[var(--rf-green)]
                                 "
                             >
-                                Continue onboarding
+                                Continue to vehicle setup
                             </button>
                         </div>
                     )}

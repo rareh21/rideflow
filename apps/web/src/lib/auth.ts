@@ -43,8 +43,11 @@ export async function getCurrentUser() {
   return api<{
     user: {
       userId: string;
+      name: string;
+      email: string;
       role: User["role"];
     };
+    accessToken?: string;
     message: string;
   }>("/auth/me");
 }

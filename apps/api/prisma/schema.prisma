@@ -167,6 +167,7 @@ model Ride {
   estimatedDurationMinutes Int
 
   paymentMethod PaymentMethod?
+  pickupOtp     String?
 
   rider  User    @relation("RiderRides", fields: [riderId], references: [id])
   driver Driver? @relation("DriverRides", fields: [driverId], references: [id])

@@ -27,10 +27,7 @@ export class AuthController {
     @Get("me")
     @UseGuards(JwtAuthGuard)
     me(@CurrentUser() user: AuthUser) {
-        return {
-            user,
-            message: "You are authenticated",
-        };
+        return this.authService.getCurrentUser(user.userId);
     }
 
     @Get("driver-test")

@@ -37,6 +37,41 @@ export async function createDriverApplication(
     );
 }
 
+export type AdminDriverApplication = DriverApplication & {
+    userId: string;
+    reviewedById: string | null;
+    user: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+        createdAt: string;
+    };
+};
+
+export type ReviewDriverApplicationPayload = {
+    status: "APPROVED" | "REJECTED";
+    rejectionReason?: string;
+};
+
+export async function getDriverApplications() {
+    return api<AdminDriverApplication[]>("/drivers/applications");
+}
+
+export async function getDriverApplicationById(id: string) {
+    return api<AdminDriverApplication>(`/drivers/applications/${id}`);
+}
+
+export async function reviewDriverApplication(
+    id: string,
+    payload: ReviewDriverApplicationPayload,
+) {
+    return api<AdminDriverApplication>(`/drivers/applications/${id}/review`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+    });
+}
+
 export type DriverStatus =
     | "OFFLINE"
     | "AVAILABLE"

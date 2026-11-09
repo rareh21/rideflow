@@ -784,6 +784,57 @@ describe("RidesService — updateStatus (Batch 5 Lifecycle & Completion)", () =>
         expect(updated.status).toBe("IN_PROGRESS");
     });
 
+    it("rejects DRIVER_ARRIVED -> IN_PROGRESS when pickupOtp is set and otp is invalid or missing", async () => {
+        const prisma = buildPrismaStub();
+        const gateway = buildGatewayStub();
+        (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            status: "DRIVER_ARRIVED",
+            riderId: "rider-uuid",
+            driverId: "driver-uuid",
+            pickupOtp: "4829",
+            driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "BUSY" },
+        });
+
+        const service = await buildService(prisma, gateway);
+
+        // Missing OTP
+        await expect(
+            service.updateStatus("ride-1", "driver-user-uuid", "IN_PROGRESS"),
+        ).rejects.toThrow(BadRequestException);
+
+        // Wrong OTP
+        await expect(
+            service.updateStatus("ride-1", "driver-user-uuid", "IN_PROGRESS", "0000"),
+        ).rejects.toThrow(BadRequestException);
+    });
+
+    it("allows DRIVER_ARRIVED -> IN_PROGRESS when correct pickupOtp is supplied", async () => {
+        const prisma = buildPrismaStub();
+        const gateway = buildGatewayStub();
+        (prisma.ride.findUnique as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            status: "DRIVER_ARRIVED",
+            riderId: "rider-uuid",
+            driverId: "driver-uuid",
+            pickupOtp: "4829",
+            driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "BUSY" },
+        });
+        (prisma.ride.update as jest.Mock).mockResolvedValue({
+            id: "ride-1",
+            status: "IN_PROGRESS",
+            riderId: "rider-uuid",
+            driverId: "driver-uuid",
+            pickupOtp: "4829",
+            driver: { id: "driver-uuid", userId: "driver-user-uuid", status: "BUSY" },
+        });
+
+        const service = await buildService(prisma, gateway);
+        const updated = await service.updateStatus("ride-1", "driver-user-uuid", "IN_PROGRESS", "4829");
+
+        expect(updated.status).toBe("IN_PROGRESS");
+    });
+
     it("atomically completes ride and sets driver to AVAILABLE on COMPLETED", async () => {
         const prisma = buildPrismaStub();
         const gateway = buildGatewayStub();

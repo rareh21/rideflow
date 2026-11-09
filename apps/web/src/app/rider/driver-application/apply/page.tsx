@@ -220,7 +220,7 @@ export default function DriverApplicationApplyPage() {
                             href={
                                 application.status ===
                                     "APPROVED"
-                                    ? "/rider/driver-onboarding"
+                                    ? "/driver/vehicle"
                                     : "/rider/driver-application"
                             }
                             className="
@@ -240,7 +240,7 @@ export default function DriverApplicationApplyPage() {
                         >
                             {application.status ===
                                 "APPROVED"
-                                ? "Continue onboarding"
+                                ? "Set up your vehicle"
                                 : "View application status"}
                         </Link>
                     </section>
